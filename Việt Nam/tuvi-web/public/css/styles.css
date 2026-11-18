@@ -1,0 +1,946 @@
+/* ==========================================================================
+   Thiên Kỷ — Hệ thống Lập & Khám phá Lá số Tử Vi Đẩu Số
+   Phong cách: Không Gian Vũ Trụ Sâu Thẳm (Cosmic Deep Space Theme)
+   Tối ưu tương tác: Emil Kowalski Design Engineering Principles
+   ========================================================================== */
+
+:root {
+  /* Tông màu vũ trụ sâu thẳm: Midnight Space, Obsidian, Tinh vân Tím & Vàng Kim */
+  --bg-deep-space: #030712;
+  --bg-space-mesh: #080C1B;
+  --bg-glass-card: rgba(15, 23, 42, 0.78);
+  --bg-glass-panel: rgba(11, 15, 25, 0.85);
+  --bg-cell: rgba(17, 24, 39, 0.82);
+  --bg-cell-hover: rgba(30, 41, 59, 0.9);
+  --bg-cell-active: rgba(88, 28, 135, 0.35);
+
+  --border-neon-subtle: rgba(148, 163, 184, 0.15);
+  --border-neon-purple: rgba(168, 85, 247, 0.3);
+  --border-neon-gold: rgba(245, 158, 11, 0.45);
+  --border-neon-active: #A855F7;
+
+  --text-pure: #F8FAFC;
+  --text-bright: #E2E8F0;
+  --text-muted: #94A3B8;
+  --text-subtle: #64748B;
+
+  /* Màu sao theo tính chất phong thủy Tử Vi */
+  --c-star-good: #FBBF24;       /* Vàng kim rực rỡ - Cát tinh & Chính tinh tốt */
+  --c-star-bad: #F43F5E;        /* Đỏ hồng/tím gai góc - Sát tinh, Bại tinh */
+  --c-star-major: #FDE047;      /* Vàng sáng - Chính tinh */
+  --c-star-minor: #E2E8F0;      /* Trắng ngà - Phụ tinh thường */
+
+  /* Tứ Hóa rực rỡ trong bóng đêm */
+  --sihua-lu: #10B981;          /* Xanh ngọc bích */
+  --sihua-quan: #EF4444;        /* Đỏ son uy quyền */
+  --sihua-ke: #F59E0B;          /* Hổ phách danh vọng */
+  --sihua-ji: #A855F7;          /* Tím huyền bí */
+
+  /* Độ sáng sao */
+  --b-miao: #DC2626;            /* Miếu */
+  --b-wang: #EA580C;            /* Vượng */
+  --b-de: #059669;              /* Đắc */
+  --b-li: #0284C7;              /* Lợi */
+  --b-ping: #64748B;            /* Bình */
+  --b-xian: #475569;            /* Hãm */
+
+  /* Phông chữ */
+  --font-serif: "Playfair Display", "Times New Roman", Georgia, serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: "JetBrains Mono", Consolas, monospace;
+
+  /* Emil Kowalski Curves */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-snappy: 180ms;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  min-height: 100dvh;
+  background-color: var(--bg-deep-space);
+  background-image: radial-gradient(circle at 50% 20%, rgba(88, 28, 135, 0.18), transparent 70%),
+                    url('/assets/cosmic-bg.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  color: var(--text-bright);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* Canvas Hạt Sao Toàn Màn Hình */
+#starfield-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* App Wrapper */
+.app-container {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+/* ==========================================================================
+   Header Tinh Vân Vũ Trụ
+   ========================================================================== */
+
+.app-header {
+  background: rgba(3, 7, 18, 0.7);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-neon-subtle);
+  padding: 12px 24px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.brand-title {
+  font-family: var(--font-serif);
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background: linear-gradient(135deg, #FDE047 0%, #F59E0B 50%, #EF4444 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.4));
+}
+
+.brand-sub {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.badge-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(88, 28, 135, 0.25);
+  color: #D8B4FE;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.2);
+}
+
+.badge-tag.sample {
+  background: rgba(14, 165, 233, 0.25);
+  color: #7DD3FC;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+/* ==========================================================================
+   Nút Bấm Vũ Trụ (Buttons) - Emil Kowalski Micro-interactions
+   ========================================================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 16px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  user-select: none;
+  touch-action: manipulation;
+  transition: transform var(--duration-snappy) var(--ease-out),
+              background-color var(--duration-snappy) var(--ease-out),
+              box-shadow var(--duration-snappy) var(--ease-out),
+              border-color var(--duration-snappy) var(--ease-out);
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #7C3AED 0%, #D97706 100%);
+  color: #FFFFFF;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 16px rgba(124, 58, 237, 0.4);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #6D28D9 0%, #B45309 100%);
+    box-shadow: 0 0 24px rgba(245, 158, 11, 0.6);
+  }
+}
+
+.btn-secondary {
+  background: rgba(30, 41, 59, 0.6);
+  color: var(--text-pure);
+  border: 1px solid var(--border-neon-subtle);
+  backdrop-filter: blur(8px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-secondary:hover {
+    background: rgba(51, 65, 85, 0.8);
+    border-color: var(--border-neon-purple);
+  }
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-ghost:hover {
+    color: var(--text-pure);
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+
+.btn-sm {
+  padding: 5px 12px;
+  font-size: 0.8rem;
+}
+
+/* ==========================================================================
+   2 Màn Hình Riêng Biệt (Two Separate Screens)
+   ========================================================================== */
+
+.view-screen {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  animation: fadeInScreen 250ms var(--ease-out);
+}
+
+.view-screen.hidden {
+  display: none !important;
+}
+
+@keyframes fadeInScreen {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ==========================================================================
+   Màn Hình 1: Nhập Dữ Kiện Lập Số (Cosmic Portal View)
+   ========================================================================== */
+
+.input-screen-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 16px;
+  min-height: calc(100dvh - 80px);
+}
+
+.portal-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--bg-glass-card);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-neon-purple);
+  border-radius: 16px;
+  box-shadow: 0 0 35px rgba(88, 28, 135, 0.25), 0 20px 40px rgba(0, 0, 0, 0.6);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.portal-header {
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.portal-title {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #FDE047;
+  text-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+}
+
+.portal-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-bright);
+  display: flex;
+  justify-content: space-between;
+}
+
+.form-input, .form-select {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 16px; /* Quy tắc mobile-native: >= 16px để tránh zoom trên iOS */
+  font-family: var(--font-sans);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.65);
+  color: var(--text-pure);
+  transition: border-color var(--duration-snappy) var(--ease-out),
+              box-shadow var(--duration-snappy) var(--ease-out);
+}
+
+.form-input:focus, .form-select:focus {
+  outline: none;
+  border-color: #A855F7;
+  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.3);
+}
+
+.segmented-control {
+  display: flex;
+  background: rgba(15, 23, 42, 0.8);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 3px;
+  border: 1px solid var(--border-neon-subtle);
+}
+
+.segmented-btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+  transition: background-color var(--duration-snappy) var(--ease-out),
+              color var(--duration-snappy) var(--ease-out);
+}
+
+.segmented-btn.active {
+  background: linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%);
+  color: #FFFFFF;
+  box-shadow: 0 0 10px rgba(124, 58, 237, 0.4);
+}
+
+.row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #A855F7;
+}
+
+/* ==========================================================================
+   Màn Hình 2: Bàn Cờ Lá Số 4x4 (Cosmic Natal Chart)
+   ========================================================================== */
+
+.chart-screen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: rgba(15, 23, 42, 0.7);
+  border-bottom: 1px solid var(--border-neon-subtle);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.chart-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 16px;
+  padding: 16px 20px;
+  max-width: 1440px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (max-width: 1024px) {
+  .chart-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.board-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.95);
+  border: 2px solid var(--border-neon-purple);
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: 0 0 30px rgba(88, 28, 135, 0.3);
+  position: relative;
+}
+
+.relations-svg-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* ==========================================================================
+   Ô Cung Bàn Cờ: Sao Đẹp Bên Trái, Sao Xấu Bên Phải
+   ========================================================================== */
+
+.palace-cell {
+  background: var(--bg-cell);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 6px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: background-color var(--duration-snappy) var(--ease-out),
+              border-color var(--duration-snappy) var(--ease-out),
+              box-shadow var(--duration-snappy) var(--ease-out);
+}
+
+.palace-cell .cell-top,
+.palace-cell .cell-columns-container,
+.palace-cell .cell-bottom {
+  position: relative;
+  z-index: 6;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .palace-cell:hover {
+    background: var(--bg-cell-hover);
+    border-color: rgba(168, 85, 247, 0.4);
+  }
+}
+
+.palace-cell.active {
+  background: var(--bg-cell-active);
+  border-color: #A855F7;
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.45), inset 0 0 12px rgba(124, 58, 237, 0.2);
+  z-index: 8;
+}
+
+.palace-cell.rel-opposite {
+  border-color: rgba(239, 68, 68, 0.7);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+}
+
+.palace-cell.rel-trine {
+  border-color: rgba(6, 182, 212, 0.7);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.25);
+}
+
+/* Phân bố 12 Cung theo Địa Chi */
+.palace-cell[data-branch="5"]  { grid-row: 1; grid-column: 1; }
+.palace-cell[data-branch="6"]  { grid-row: 1; grid-column: 2; }
+.palace-cell[data-branch="7"]  { grid-row: 1; grid-column: 3; }
+.palace-cell[data-branch="8"]  { grid-row: 1; grid-column: 4; }
+.palace-cell[data-branch="4"]  { grid-row: 2; grid-column: 1; }
+.palace-cell[data-branch="9"]  { grid-row: 2; grid-column: 4; }
+.palace-cell[data-branch="3"]  { grid-row: 3; grid-column: 1; }
+.palace-cell[data-branch="10"] { grid-row: 3; grid-column: 4; }
+.palace-cell[data-branch="2"]  { grid-row: 4; grid-column: 1; }
+.palace-cell[data-branch="1"]  { grid-row: 4; grid-column: 2; }
+.palace-cell[data-branch="0"]  { grid-row: 4; grid-column: 3; }
+.palace-cell[data-branch="11"] { grid-row: 4; grid-column: 4; }
+
+/* Vùng Trung Tâm 2x2 */
+.center-cell {
+  grid-row: 2 / span 2;
+  grid-column: 2 / span 2;
+  background: rgba(11, 15, 25, 0.96);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-neon-gold);
+  border-radius: 8px;
+  padding: 10px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+
+.center-content-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  text-align: center;
+}
+
+.cosmic-mandala-ring {
+  position: absolute;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background-image: url('/assets/celestial-emblem.jpg');
+  background-size: cover;
+  background-position: center;
+  opacity: 0.28;
+  filter: drop-shadow(0 0 15px rgba(245, 158, 11, 0.4));
+  animation: rotateMandala 120s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes rotateMandala {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.center-brand-title {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #FDE047;
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+}
+
+.center-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+  font-size: 0.72rem;
+  background: rgba(15, 23, 42, 0.7);
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  margin: 4px 0;
+  text-align: left;
+}
+
+.meta-label {
+  color: var(--text-muted);
+}
+
+.meta-val {
+  font-weight: 600;
+  color: var(--text-pure);
+}
+
+.center-legend {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+/* Nội dung bên trong Ô Cung */
+.cell-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  padding-bottom: 2px;
+  margin-bottom: 3px;
+}
+
+.cell-palace-name {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #F8FAFC;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.badge-ming {
+  font-family: var(--font-sans);
+  font-size: 0.62rem;
+  font-weight: 700;
+  background: #DC2626;
+  color: #FFFFFF;
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+.badge-body {
+  font-family: var(--font-sans);
+  font-size: 0.62rem;
+  font-weight: 700;
+  background: #7C3AED;
+  color: #FFFFFF;
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+.cell-can-chi {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* 2 Cột Sao: Trái (Cát) - Phải (Sát) */
+.cell-columns-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.star-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.star-col.col-left {
+  border-right: 1px dashed rgba(148, 163, 184, 0.12);
+  padding-right: 2px;
+}
+
+.star-col.col-right {
+  padding-left: 2px;
+}
+
+.star-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  font-size: 0.72rem;
+  line-height: 1.15;
+}
+
+.star-item.good-star .star-name {
+  color: var(--c-star-good);
+}
+
+.star-item.good-star.star-major .star-name {
+  color: #FDE047;
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(253, 224, 71, 0.3);
+}
+
+.star-item.bad-star .star-name {
+  color: var(--c-star-bad);
+}
+
+.star-item.bad-star.star-major .star-name {
+  color: #F87171;
+  font-weight: 700;
+}
+
+.empty-badge {
+  font-size: 0.65rem;
+  color: #64748B;
+  font-style: italic;
+}
+
+.borrowed-stars-box {
+  margin-top: 2px;
+  font-size: 0.65rem;
+  color: #64748B;
+}
+
+.borrowed-star {
+  color: #94A3B8;
+  font-style: italic;
+  display: inline-block;
+  margin-right: 2px;
+}
+
+/* Typography & Mini-Pills cho Độ Sáng và Tứ Hóa */
+.star-name-wrap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.star-bright {
+  font-size: 0.63rem;
+  font-weight: 600;
+  line-height: 1;
+  display: inline-block;
+  opacity: 0.95;
+}
+
+/* Các cấp độ sáng theo truyền thống Tử Vi: chữ màu mềm mại, KHÔNG dùng khối nền đỏ thô kệch */
+.star-bright.star-bright-b-miao, .star-bright.star-bright-miao { color: #F87171; } /* Miếu địa */
+.star-bright.star-bright-b-wang, .star-bright.star-bright-wang { color: #FB923C; } /* Vượng địa */
+.star-bright.star-bright-b-de,   .star-bright.star-bright-de   { color: #FBBF24; } /* Đắc địa */
+.star-bright.star-bright-b-li,   .star-bright.star-bright-li   { color: #34D399; } /* Lợi địa */
+.star-bright.star-bright-b-ping, .star-bright.star-bright-ping { color: #94A3B8; } /* Bình hòa */
+.star-bright.star-bright-b-xian, .star-bright.star-bright-xian { color: #64748B; } /* Hãm địa */
+
+/* Tứ Hóa: mini-badge bán trong suốt tinh tế, viền mảnh 1px, không clipping chân chữ */
+.sihua-badge {
+  font-size: 0.6rem;
+  line-height: 1.15;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sihua-badge.sh-lu {
+  background: rgba(16, 185, 129, 0.16);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  color: #6EE7B7;
+}
+
+.sihua-badge.sh-quan {
+  background: rgba(239, 68, 68, 0.16);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #FCA5A5;
+}
+
+.sihua-badge.sh-ke {
+  background: rgba(59, 130, 246, 0.16);
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  color: #93C5FD;
+}
+
+.sihua-badge.sh-ji {
+  background: rgba(168, 85, 247, 0.16);
+  border: 1px solid rgba(168, 85, 247, 0.5);
+  color: #D8B4FE;
+}
+
+.cell-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+  padding-top: 2px;
+  margin-top: 2px;
+  font-size: 0.68rem;
+  color: var(--text-subtle);
+}
+
+.daxian-badge {
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   Bảng Chi Tiết Cung Bên Phải
+   ========================================================================== */
+
+.details-panel {
+  background: var(--bg-glass-panel);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-neon-purple);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.detail-section-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ==========================================================================
+   Thanh Nút Luận Giải Khổng Lồ Ở Dưới Bàn Cờ
+   ========================================================================== */
+
+.reading-action-bar {
+  display: flex;
+  justify-content: center;
+  padding: 14px 20px 24px 20px;
+  width: 100%;
+}
+
+.btn-reading-huge {
+  padding: 14px 32px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-family: var(--font-serif);
+  background: linear-gradient(135deg, #9333EA 0%, #D97706 50%, #EF4444 100%);
+  color: #FFFFFF;
+  border-radius: 9999px;
+  border: 1px solid rgba(253, 224, 71, 0.5);
+  box-shadow: 0 0 25px rgba(168, 85, 247, 0.5), 0 0 50px rgba(217, 119, 6, 0.3);
+  cursor: pointer;
+  animation: pulseGlow 3s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.4), 0 0 40px rgba(217, 119, 6, 0.2);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 35px rgba(168, 85, 247, 0.7), 0 0 60px rgba(217, 119, 6, 0.5);
+    transform: scale(1.02);
+  }
+}
+
+/* ==========================================================================
+   Màn Hình 3: Luận Giải Chuyên Sâu (Reading View)
+   ========================================================================== */
+
+.reading-screen-wrapper {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 16px 40px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.reading-card {
+  background: var(--bg-glass-card);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-neon-purple);
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reading-card-title {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #FDE047;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reading-card-body {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: #CBD5E1;
+}
+
+.reading-card-body strong {
+  color: #F8FAFC;
+}
+
+/* Responsive */
+.mobile-card-list {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .board-container.mode-list {
+    display: none;
+  }
+  .mobile-card-list.mode-list {
+    display: flex;
+  }
+  .mobile-palace-card {
+    background: var(--bg-cell);
+    border: 1px solid var(--border-neon-purple);
+    border-radius: 8px;
+    padding: 10px;
+    cursor: pointer;
+  }
+  .mobile-palace-card.active {
+    background: var(--bg-cell-active);
+    border-color: #F59E0B;
+  }
+  .btn-reading-huge {
+    width: 100%;
+    font-size: 0.95rem;
+    padding: 12px 18px;
+  }
+}

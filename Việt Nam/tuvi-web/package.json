@@ -1,0 +1,16 @@
+{
+  "name": "tuvi-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Giao diện và máy chủ web cho Thiên Kỷ - Lập lá số Tử Vi Đẩu Số",
+  "type": "commonjs",
+  "main": "server.js",
+  "engines": {
+    "node": ">=24.14.1 <25"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "license": "MIT"
+}
