@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+data/*.zst
+data/*.jsonl
+data/*.tar
+*.tmp
+*.log

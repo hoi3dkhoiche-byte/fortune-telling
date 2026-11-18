@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "calendar-difference.v1",
+  "model": {
+    "id": "astronomy-engine-fixed-UTC+7",
+    "dependency": "astronomy-engine@2.1.19",
+    "source": "https://github.com/cosinekitty/astronomy",
+    "limitation": "Astronomical UTC+7 model; not a reconstruction of all historical official Vietnamese calendars."
+  },
+  "chineseCalendar": "lunar-javascript@1.7.7, as used by the vendored upstream engine",
+  "range": {
+    "fromYear": 1990,
+    "toYear": 1990
+  },
+  "summary": {
+    "comparedDays": 365,
+    "differentDays": 0
+  },
+  "years": [
+    {
+      "year": 1990,
+      "comparedDays": 365,
+      "differentDays": 0,
+      "differences": []
+    }
+  ],
+  "limitation": "Differences are a calendar-convention warning. They do not establish which convention a school or historical civil record intended."
+}

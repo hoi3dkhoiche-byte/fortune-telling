@@ -1,0 +1,9 @@
+{
+  "calendar": "solar",
+  "date": "1990-01-01",
+  "time": "12:30",
+  "tz": "Asia/Ho_Chi_Minh",
+  "place": { "lat": 10.7769, "lon": 106.7009 },
+  "gender": "male",
+  "calendarConvention": "chinese"
+}

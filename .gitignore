@@ -1,0 +1,54 @@
+# ==========================================
+# CÁC FOLDER CODE CŨ & FILE NÉN
+# ==========================================
+China/ziwei-doushu-main/
+china/ziwei-doushu-main/
+ziwei-doushu-main/
+**/ziwei-doushu-main/
+China/ziwei-doushu-main.zip
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.rar
+
+# ==========================================
+# CÁC FOLDER & FILE DATASET (DUNG LƯỢNG LỚN)
+# ==========================================
+dataset/
+datasets/
+**/dataset/
+**/datasets/
+**/data/*.zst
+**/data/*.jsonl
+**/data/*.tar
+**/data/*.parquet
+*.jsonl.zst
+*.zst
+ziwei-interp-v4-all/
+ziwei-interp-v4-all.tar
+
+# ==========================================
+# NODE, BUILD CACHE & PHỤ THUỘC
+# ==========================================
+.npm-cache/
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+coverage/
+*.tsbuildinfo
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================================
+# HỆ ĐIỀU HÀNH & MÔI TRƯỜNG
+# ==========================================
+.DS_Store
+Thumbs.db
+.env
+.env.local
+.vscode/
+.idea/

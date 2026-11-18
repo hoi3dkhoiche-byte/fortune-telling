@@ -1,0 +1,282 @@
+{
+  "schemaVersion": "dataset-comparison.v1",
+  "source": {
+    "file": "year-1990.jsonl.zst",
+    "sha256": "d89f446543a2f542c03b8df2e81cfc48cf422b7968bf833d6ceeebfd3f94f4da",
+    "expectedChecksum": "d89f446543a2f542c03b8df2e81cfc48cf422b7968bf833d6ceeebfd3f94f4da",
+    "checksumVerified": true,
+    "releaseTag": "v4.0-13d"
+  },
+  "coverage": {
+    "rows": 8760,
+    "uniqueKeys": 8760,
+    "years": [
+      1990
+    ],
+    "expectedRowsForWholeYears": 8760,
+    "completeWholeYears": true,
+    "truncated": false,
+    "firstKey": "1990-01-01-0-male",
+    "lastKey": "1990-12-31-11-female"
+  },
+  "comparison": "exact equality of dataset ms and the first major star in the natal Mệnh palace; null means no major star",
+  "profiles": [
+    {
+      "profile": {
+        "id": "repro-v4",
+        "brightnessSchool": "XD2",
+        "leapMonth": "split",
+        "lateZi": "next-day",
+        "solarTime": "none",
+        "status": "repro"
+      },
+      "evaluated": 8760,
+      "matched": 8760,
+      "mismatched": 0,
+      "groups": {
+        "leapMonth": {
+          "evaluated": 696,
+          "matched": 696,
+          "mismatched": 0
+        },
+        "nonLeapMonth": {
+          "evaluated": 8064,
+          "matched": 8064,
+          "mismatched": 0
+        },
+        "lunarYearBoundary": {
+          "evaluated": 696,
+          "matched": 696,
+          "mismatched": 0
+        },
+        "hourBranchZi": {
+          "evaluated": 730,
+          "matched": 730,
+          "mismatched": 0
+        }
+      },
+      "emptyMingMatched": 1428,
+      "mismatchExamples": []
+    },
+    {
+      "profile": {
+        "id": "thienky-candidate",
+        "brightnessSchool": "XD2",
+        "leapMonth": "next-month",
+        "lateZi": "current-day",
+        "solarTime": "none",
+        "status": "candidate"
+      },
+      "evaluated": 8760,
+      "matched": 8432,
+      "mismatched": 328,
+      "groups": {
+        "leapMonth": {
+          "evaluated": 696,
+          "matched": 368,
+          "mismatched": 328
+        },
+        "nonLeapMonth": {
+          "evaluated": 8064,
+          "matched": 8064,
+          "mismatched": 0
+        },
+        "lunarYearBoundary": {
+          "evaluated": 696,
+          "matched": 696,
+          "mismatched": 0
+        },
+        "hourBranchZi": {
+          "evaluated": 730,
+          "matched": 706,
+          "mismatched": 24
+        }
+      },
+      "emptyMingMatched": 1374,
+      "mismatchExamples": [
+        {
+          "key": "1990-06-23-0-male",
+          "expected": "七杀",
+          "actual": null,
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-0-female",
+          "expected": "七杀",
+          "actual": null,
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-1-male",
+          "expected": "天府",
+          "actual": "七杀",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-1-female",
+          "expected": "天府",
+          "actual": "七杀",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-2-male",
+          "expected": null,
+          "actual": "天府",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-2-female",
+          "expected": null,
+          "actual": "天府",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-3-male",
+          "expected": "太阳",
+          "actual": null,
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-3-female",
+          "expected": "太阳",
+          "actual": null,
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-4-male",
+          "expected": "武曲",
+          "actual": "太阳",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-4-female",
+          "expected": "武曲",
+          "actual": "太阳",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-5-male",
+          "expected": "廉贞",
+          "actual": "武曲",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-5-female",
+          "expected": "廉贞",
+          "actual": "武曲",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-6-male",
+          "expected": "天梁",
+          "actual": "廉贞",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-6-female",
+          "expected": "天梁",
+          "actual": "廉贞",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-7-male",
+          "expected": "太阴",
+          "actual": "天梁",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-7-female",
+          "expected": "太阴",
+          "actual": "天梁",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-8-male",
+          "expected": "廉贞",
+          "actual": "太阴",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-8-female",
+          "expected": "廉贞",
+          "actual": "太阴",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-9-male",
+          "expected": "武曲",
+          "actual": "廉贞",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-9-female",
+          "expected": "武曲",
+          "actual": "廉贞",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-10-male",
+          "expected": "天同",
+          "actual": "武曲",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-10-female",
+          "expected": "天同",
+          "actual": "武曲",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-11-male",
+          "expected": null,
+          "actual": "天同",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-23-11-female",
+          "expected": null,
+          "actual": "天同",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 1
+        },
+        {
+          "key": "1990-06-24-0-male",
+          "expected": "巨门",
+          "actual": "天相",
+          "rawLunarMonth": -5,
+          "rawLunarDay": 2
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "This compares one structural field, not every palace/star/brightness/transformation or interpretation.",
+    "Branch-index input contains no clock time; h=0 cannot distinguish 00:xx from 23:xx or identify the late-Zi day rule.",
+    "ms contains no brightness value, so this check cannot identify the source brightness school.",
+    "A match reproduces published upstream data; it is not an independent correctness certification.",
+    "lunarYearBoundary group is raw lunar month 12 plus the first three days of month 1; groups can overlap."
+  ]
+}

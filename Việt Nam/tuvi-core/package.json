@@ -1,0 +1,31 @@
+{
+  "name": "@tuvi/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lõi lập lá số có cấu hình, truy vết nguồn và CLI tiếng Việt",
+  "type": "commonjs",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "bin": { "tuvi": "dist/src/cli.js" },
+  "engines": { "node": ">=24.14.1 <25" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "verify:vendor": "node scripts/verify-vendor.cjs",
+    "chart": "node dist/src/cli.js chart",
+    "batch": "node dist/src/cli.js batch",
+    "compare:v4": "node dist/scripts/compare-v4.js",
+    "calendar:diff": "node dist/scripts/calendar-diff.js"
+  },
+  "dependencies": {
+    "astronomy-engine": "2.1.19",
+    "iztro": "2.6.1",
+    "lunar-javascript": "1.7.7"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "typescript": "5.9.3"
+  },
+  "license": "MIT"
+}
