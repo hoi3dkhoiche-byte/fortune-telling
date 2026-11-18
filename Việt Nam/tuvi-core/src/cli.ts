@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync, realpathSync, statSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
+import { resolve } from 'node:path';
 import { computeNatal } from './natal';
 import { normalizeBirth } from './normalize';
 import { getProfile, PROFILE_EVIDENCE, PROFILES, validateProfile } from './profiles';
@@ -79,12 +80,20 @@ async function main() {
   if (!['chart', 'batch'].includes(command)) throw new TypeError(`Không có lệnh '${command}'. Dùng --help.`);
   const flags = parseFlags(rest);
   if (!flags.input) throw new TypeError('Cần --input đường-dẫn hoặc --input -.');
+  if (flags.output && flags.input !== '-') {
+    const inputPath = existsSync(flags.input) ? realpathSync(flags.input) : resolve(flags.input);
+    const outputPath = existsSync(flags.output) ? realpathSync(flags.output) : resolve(flags.output);
+    const samePath = process.platform === 'win32' ? inputPath.toLowerCase() === outputPath.toLowerCase() : inputPath === outputPath;
+    const sameFile = existsSync(flags.input) && existsSync(flags.output)
+      && statSync(flags.input).dev === statSync(flags.output).dev && statSync(flags.input).ino === statSync(flags.output).ino;
+    if (samePath || sameFile) throw new TypeError('Output phải khác input để giữ nguyên dữ liệu nguồn.');
+  }
   if (!flags.profile && !flags['profile-file']) throw new TypeError('Cần chọn --profile hoặc --profile-file tường minh.');
   const profile = flags['profile-file'] ? parseJson(await readFile(flags['profile-file'], 'utf8')) : getProfile(flags.profile!);
   validateProfile(profile);
   if (command === 'chart') {
     let content = '';
-    if (flags.input === '-') { for await (const chunk of process.stdin) content += chunk.toString(); }
+    if (flags.input === '-') { process.stdin.setEncoding('utf8'); for await (const chunk of process.stdin) content += chunk; }
     else content = await readFile(flags.input, 'utf8');
     const result = processInput(parseJson(content), profile, flags);
     const json = `${JSON.stringify(result, null, 2)}\n`;
@@ -115,7 +124,7 @@ async function main() {
         envelope = { line: lineNumber, status: 'error', error: { code: 'INVALID_INPUT', message: error instanceof Error ? error.message : String(error) } };
       }
       const text = `${JSON.stringify(envelope)}\n`;
-      if (output) await output.write(text);
+      if (output) await output.writeFile(text, 'utf8');
       else if (!process.stdout.write(text)) await new Promise<void>(resolve => process.stdout.once('drain', resolve));
     }
   } finally { await output?.close(); }

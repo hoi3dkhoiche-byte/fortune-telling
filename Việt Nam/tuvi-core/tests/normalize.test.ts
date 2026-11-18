@@ -1,0 +1,121 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { normalizeBirth } from '../src/normalize';
+import { resolveLocalTime } from '../src/timezone';
+import { getProfile } from '../src/profiles';
+import type { BirthInput } from '../src/types';
+
+const birth: BirthInput = {
+  calendar: 'solar', date: '1990-01-01', time: '12:30', tz: 'Asia/Ho_Chi_Minh', gender: 'male', calendarConvention: 'chinese',
+};
+
+test('civil normalization returns explicit chart-ready hour and IANA audit', () => {
+  const result = normalizeBirth(birth, getProfile('repro-v4'));
+  assert.equal(result.status, 'ok');
+  if (result.status !== 'ok') return;
+  assert.deepEqual(result.chart, { year: 1990, month: 1, day: 1, hourBranch: 6, gender: 'male' });
+  const zone = result.audit.find(s => s.step === 'iana-time-zone')!.data!;
+  assert.equal((zone.candidates as { utcOffsetMinutes: number }[])[0].utcOffsetMinutes, 420);
+});
+
+test('unknown birth time is never replaced by Zi', () => {
+  const result = normalizeBirth({ ...birth, time: null }, getProfile('repro-v4'));
+  assert.equal(result.status, 'needs');
+  if (result.status === 'needs') assert.equal(result.reason, 'NEEDS_BIRTH_TIME');
+  assert.ok(!('chart' in result));
+});
+
+test('23:30 follows the selected late-Zi rule across month and year', () => {
+  const input = { ...birth, date: '1990-12-31', time: '23:30' };
+  const a = normalizeBirth(input, getProfile('repro-v4'));
+  const b = normalizeBirth(input, getProfile('thienky-candidate'));
+  assert.equal(a.status, 'ok'); assert.equal(b.status, 'ok');
+  if (a.status !== 'ok' || b.status !== 'ok') return;
+  assert.deepEqual(a.chart, { year: 1991, month: 1, day: 1, hourBranch: 0, gender: 'male' });
+  assert.deepEqual(b.chart, { year: 1990, month: 12, day: 31, hourBranch: 0, gender: 'male' });
+});
+
+test('near a branch boundary returns distinct scenarios instead of choosing', () => {
+  for (const time of ['00:59', '01:00', '02:59', '23:00']) {
+    const result = normalizeBirth({ ...birth, time }, getProfile('thienky-candidate'));
+    assert.equal(result.status, 'needs', time);
+    if (result.status === 'needs') {
+      assert.equal(result.reason, 'HOUR_BOUNDARY');
+      assert.ok(result.scenarios && result.scenarios.length >= 2);
+    }
+  }
+});
+
+test('boundary checking can be explicitly disabled while preserving deterministic mapping', () => {
+  const result = normalizeBirth({ ...birth, time: '01:00' }, getProfile('repro-v4'), { boundaryMinutes: 0 });
+  assert.equal(result.status, 'ok');
+  if (result.status === 'ok') assert.equal(result.chart.hourBranch, 1);
+});
+
+test('lunar input requires leap identity; leap fifth month 1990 maps to June 23', () => {
+  const input: BirthInput = { ...birth, calendar: 'lunar', date: '1990-05-01', isLeap: true };
+  const result = normalizeBirth(input, getProfile('thienky-candidate'));
+  assert.equal(result.status, 'ok');
+  if (result.status === 'ok') assert.deepEqual(result.chart, { year: 1990, month: 6, day: 23, hourBranch: 6, gender: 'male' });
+  const { isLeap, ...missingLeap } = input;
+  assert.throws(() => normalizeBirth(missingLeap, getProfile('repro-v4')));
+});
+
+test('calendar disagreements are surfaced, never silently fed to the Chinese engine as Vietnamese', () => {
+  const common = { ...birth, date: '1968-01-29' };
+  const unresolved = normalizeBirth({ ...common, calendarConvention: undefined }, getProfile('repro-v4'));
+  assert.equal(unresolved.status, 'needs');
+  if (unresolved.status === 'needs') assert.equal(unresolved.reason, 'CALENDAR_DIVERGENCE');
+  const vietnamese = normalizeBirth({ ...common, calendarConvention: 'vietnamese' }, getProfile('repro-v4'));
+  assert.equal(vietnamese.status, 'needs');
+  const explicit = normalizeBirth({ ...common, calendarConvention: 'chinese' }, getProfile('repro-v4'));
+  assert.equal(explicit.status, 'ok');
+  if (explicit.status === 'ok') assert.ok(explicit.warnings.length > 0);
+  const lunar = normalizeBirth({ ...common, calendar: 'lunar', date: '1968-01-01', isLeap: false, calendarConvention: undefined }, getProfile('repro-v4'));
+  assert.equal(lunar.status, 'needs');
+  if (lunar.status === 'needs') assert.equal(lunar.reason, 'CALENDAR_CONFIRMATION');
+});
+
+test('IANA detects a skipped and a repeated local clock (New York 2024)', () => {
+  const gap = normalizeBirth({ ...birth, date: '2024-03-10', time: '02:30', tz: 'America/New_York' }, getProfile('repro-v4'));
+  assert.equal(gap.status, 'needs');
+  if (gap.status === 'needs') assert.equal(gap.reason, 'NONEXISTENT_LOCAL_TIME');
+  const overlap = normalizeBirth({ ...birth, date: '2024-11-03', time: '01:30', tz: 'America/New_York' }, getProfile('repro-v4'));
+  assert.equal(overlap.status, 'needs');
+  if (overlap.status === 'needs') assert.equal(overlap.reason, 'AMBIGUOUS_LOCAL_TIME');
+  const zone = resolveLocalTime({ year: 2024, month: 11, day: 3, hour: 1, minute: 30 }, 'America/New_York');
+  assert.deepEqual(zone.candidates.map(c => c.utcOffsetMinutes), [-240, -300]);
+});
+
+test('IANA historic Saigon offsets are not hardcoded to modern UTC+7', () => {
+  // IANA asia source: +08 through 1975-06-13; then +07. This verifies tzdb, not all historical records.
+  for (const [year, expected] of [[1970, 480], [1990, 420]]) {
+    const zone = resolveLocalTime({ year, month: 1, day: 1, hour: 12, minute: 0 }, 'Asia/Ho_Chi_Minh');
+    assert.equal(zone.status, 'unique');
+    assert.equal(zone.candidates[0].utcOffsetMinutes, expected);
+    assert.ok(zone.database.icu);
+  }
+});
+
+test('solar correction that changes branch/day offers both scenarios and requires place', () => {
+  const profile = { ...getProfile('thienky-candidate'), id: 'solar-test', solarTime: 'longitude' as const };
+  const noPlace = normalizeBirth(birth, profile);
+  assert.equal(noPlace.status, 'needs');
+  if (noPlace.status === 'needs') assert.equal(noPlace.reason, 'NEEDS_BIRTH_PLACE');
+  const result = normalizeBirth({ ...birth, time: '00:05', place: { lat: 0, lon: 90 } }, profile);
+  assert.equal(result.status, 'needs');
+  if (result.status === 'needs') {
+    assert.equal(result.reason, 'HOUR_BOUNDARY');
+    assert.ok(result.scenarios?.some(c => c.year === 1989 && c.month === 12 && c.day === 31));
+    assert.ok(result.scenarios?.some(c => c.year === 1990 && c.month === 1 && c.day === 1));
+  }
+});
+
+test('normalizer rejects malformed dates/clocks/zones and unsupported fields', () => {
+  for (const change of [
+    { date: '1990-02-30' }, { time: '24:00' }, { time: undefined }, { tz: 'UTC+7' },
+    { tz: 'Asia/Not_A_Zone' }, { calendar: 'auto' }, { gender: 'other' }, { isLeap: false },
+    { place: { lat: 100, lon: 106 } }, { clockHour: 12 },
+  ]) assert.throws(() => normalizeBirth({ ...birth, ...change } as BirthInput, getProfile('repro-v4')));
+  assert.throws(() => normalizeBirth(birth, getProfile('repro-v4'), { boundaryMinutes: -1 }));
+});
