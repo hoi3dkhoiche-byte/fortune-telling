@@ -57,11 +57,15 @@ Hai quy tắc ứng viên có nguồn trong Bài 04 Thượng, 00:29:35 và 00:2
 
 `--profile-file profile.json` nhận đầy đủ các field `id`, `brightnessSchool`, `leapMonth`, `lateZi`, `solarTime`, `status`; không dùng đồng thời với `--profile`. `solarTime` hỗ trợ `none`, `longitude`, `longitude+eot` và hai chế độ sau cần `place`. Chế độ `none` giữ giờ đồng hồ đã nhập; IANA được dùng để kiểm tính tồn tại/duy nhất và ghi offset. Hiệu chỉnh kinh độ/EOT dùng offset IANA tại thời điểm sinh, bao gồm dịch chuyển DST/lịch sử, tránh trừ hai lần.
 
+Timezone là dữ kiện người nhập chọn, code không suy múi giờ từ tọa độ. `Asia/Ho_Chi_Minh` theo lịch sử Sài Gòn trong tzdb, không đại diện mọi miền Việt Nam trong quá khứ. Với hồ sơ lịch sử thuộc quy ước khác, cần xác nhận timezone tương ứng; có thể dùng IANA dạng `Etc/GMT-7` khi đã xác nhận offset cố định +07:00. Dấu trong tên `Etc/GMT` theo quy ước IANA nên đảo với dấu offset thông thường.
+
 ## Kết quả và trạng thái cần làm rõ
 
-`computeNatal(chartReady, profile)` trả bản mệnh, hash chuẩn hóa, profile, provenance, nhãn Việt, facts và quan hệ cung. Bản mệnh loại ba trường phụ thuộc ngày chạy; mảng cung sắp theo địa chi 0–11. Hash bao gồm toàn bộ giá trị profile, snapshot vendor và dữ kiện bản mệnh. Nhãn/facts không tham gia hash bản mệnh, được nhận diện bằng phiên bản schema/glossary riêng.
+`computeNatal(chartReady, profile)` trả bản mệnh, hash chuẩn hóa, profile, provenance, nhãn Việt, facts và quan hệ cung. Bản mệnh loại ba trường phụ thuộc ngày chạy; mảng cung sắp theo địa chi 0–11. Hash bao gồm toàn bộ giá trị profile, snapshot vendor, fingerprint dependency runtime trong lockfile và dữ kiện bản mệnh. Nhãn/facts không tham gia hash bản mệnh, được nhận diện bằng phiên bản schema/glossary riêng.
 
 Facts có ID ngữ nghĩa như `STAR.TIANLIANG@PALACE.MING` và `SIHUA.KE.TIANLIANG@PALACE.MING`, loại nhận định, subject/predicate/object và JSON Pointer về dữ kiện gốc. Có đối cung, tam hợp, tam phương tứ chính, tứ hóa **bản mệnh**, khoảng tuổi đại hạn và sao mượn. Sao mượn được ghi thành quan hệ mượn, không biến thành sao tọa thủ thật. Tên chưa có trong glossary giữ nguyên và đánh dấu unknown.
+
+Các field phụ `lunarInfo.fourPillars`/`fourPillarsLunar` giữ theo upstream: chúng dùng điểm giữa thời thần, không tính Tứ Trụ chính xác đến phút ở ranh tiết khí. Không dùng chúng làm đầu ra Bát Tự đã được xác nhận.
 
 `normalizeBirth(birth, profile)` trả `ok` hoặc `needs`, kèm audit. Các lý do hiện có:
 
@@ -97,6 +101,6 @@ Kết quả đã lưu ở `reports/`. Mô hình Việt UTC+7 có kiểm tra vài
 
 ## Nguồn và việc còn lại
 
-`vendor/ziwei` là 10 file sao chép nguyên trạng từ source zip [Renhuai123/ziwei-doushu](https://github.com/Renhuai123/ziwei-doushu), giữ MIT trong `vendor/LICENSE`; `manifest.json` chứa SHA-256 từng file và snapshot. Zip không cung cấp commit nên `sourceCommit` để null, không đoán commit. Các dependency ghim phiên bản trong lockfile; `verify:vendor` phát hiện thay đổi vendor. `patterns.ts` chỉ lưu nguồn, chưa import vào runtime, nên marker `server-only` của nó không được thực thi.
+`vendor/ziwei` là 10 file sao chép nguyên trạng từ source zip [Renhuai123/ziwei-doushu](https://github.com/Renhuai123/ziwei-doushu), giữ MIT trong `vendor/LICENSE`; `manifest.json` chứa SHA-256 từng file và snapshot. Zip không cung cấp commit nên `sourceCommit` để null, không đoán commit. Các dependency ghim phiên bản trong lockfile; ba override giữ `lunar-lite`, `lunar-typescript` và Babel runtime cùng phiên bản lockfile nguồn. `verify:vendor` phát hiện thay đổi vendor. `patterns.ts` chỉ lưu nguồn, chưa import vào runtime, nên marker `server-only` của nó không được thực thi.
 
-Đã khởi tạo Git riêng. Chưa có 30–50 lá số vàng được người am hiểu xác nhận; không gọi các test hồi quy là golden độc lập. Chưa làm oracle Python, định vị cung vận hạn nâng cao, detector cách cục trong facts, dương trạch, API/web hay model. Bước kiểm chứng tiếp theo là duyệt tập lá số độc lập và xử lý adapter lịch Việt tại ngày lệch.
+Mã đang được theo dõi trong Git của workspace. Chưa có 30–50 lá số vàng được người am hiểu xác nhận; không gọi các test hồi quy là golden độc lập. Chưa làm oracle Python, định vị cung vận hạn nâng cao, detector cách cục trong facts, dương trạch, API/web hay model. Bước kiểm chứng tiếp theo là duyệt tập lá số độc lập và xử lý adapter lịch Việt tại ngày lệch.

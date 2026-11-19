@@ -1,5 +1,16 @@
 {
   "schemaVersion": "dataset-comparison.v1",
+  "engine": {
+    "repository": "https://github.com/Renhuai123/ziwei-doushu",
+    "sourceCommit": null,
+    "vendorSnapshotSha256": "a6bc42349f47a9fcbdcca7f2c1f0c2120e919dd6a79476bd42a3021a1f0cc062",
+    "runtimeDependenciesSha256": "75c26bc6bd13b94fbfd907675580487c03a32b71658c5c3cd657856887bdf0d7",
+    "dependencies": {
+      "iztro": "2.6.1",
+      "lunar-javascript": "1.7.7"
+    },
+    "calendar": "upstream-chinese-lunar"
+  },
   "source": {
     "file": "year-1990.jsonl.zst",
     "sha256": "d89f446543a2f542c03b8df2e81cfc48cf422b7968bf833d6ceeebfd3f94f4da",

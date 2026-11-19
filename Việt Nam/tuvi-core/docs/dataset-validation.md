@@ -34,4 +34,13 @@ Script xác nhận checksum trước khi xử lý, từ chối khóa trùng, kh�
 
 Dữ liệu release theo CC BY 4.0 với ngoại lệ lời giảng được mô tả trong `DATASET-LICENSE` của repo gốc. Công cụ này chỉ sử dụng metadata cấu trúc, không gom hoặc xuất các đoạn trích lời giảng trong `c`.
 
-Kết quả thực thi đầy đủ sẽ được lưu trong `reports/v4-1990.json`; không ghi kết quả giả định trước khi chạy.
+## Kết quả đã thực thi
+
+`reports/v4-1990.json` chứa đủ **8.760 khóa duy nhất**, không cắt mẫu, checksum hợp lệ:
+
+| Profile | Khớp `ms` | Lệch `ms` | Trong đó lệch ngoài tháng nhuận |
+|---|---:|---:|---:|
+| repro-v4 | 8.760 | 0 | 0 |
+| thienky-candidate | 8.432 | 328 | 0 |
+
+Có 696 khóa trong tháng nhuận. Profile ứng viên khác vì dùng `next-month`, trong khi profile tái hiện dùng `split`. Kết quả này không buộc phải đổi ứng viên cho giống dataset: cần giữ mục tiêu tái hiện và mục tiêu trung thành hệ phái tách biệt. Báo cáo ghi fingerprint vendor và dependency runtime của lượt chạy.

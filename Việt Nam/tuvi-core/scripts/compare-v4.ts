@@ -158,6 +158,7 @@ export async function compareV4(options: CompareOptions) {
   let lastKey: string | null = null;
   let rows = 0;
   let truncated = false;
+  let engineProvenance: ReturnType<typeof computeNatal>['provenance'] | null = null;
   for await (const row of readV4Records(path)) {
     if (options.maxRecords !== undefined && rows >= options.maxRecords) { truncated = true; break; }
     if (options.expectedYear !== undefined && row.y !== options.expectedYear) throw new Error(`Unexpected year in ${row.k}`);
@@ -170,7 +171,8 @@ export async function compareV4(options: CompareOptions) {
     const raw = resolveEffectiveLunarDate(row.y, row.m, row.d, 'origin-month');
     const chartReady: ChartReady = { year: row.y, month: row.m, day: row.d, hourBranch: row.h, gender: row.g };
     for (const report of profileReports) {
-      const { natal } = computeNatal(chartReady, report.profile, { includeFacts: false });
+      const { natal, provenance } = computeNatal(chartReady, report.profile, { includeFacts: false });
+      engineProvenance ??= provenance;
       const actual = firstMajorInMing(natal);
       const matches = actual === row.ms;
       bump(report, matches);
@@ -192,6 +194,7 @@ export async function compareV4(options: CompareOptions) {
   }, 0);
   return {
     schemaVersion: 'dataset-comparison.v1',
+    engine: engineProvenance,
     source: { file: basename(path), sha256: digest, expectedChecksum, checksumVerified: expectedChecksum === digest, releaseTag: 'v4.0-13d' },
     coverage: { rows, uniqueKeys: keys.size, years: yearList, expectedRowsForWholeYears: expectedRows, completeWholeYears: !truncated && rows === expectedRows, truncated, firstKey, lastKey },
     comparison: 'exact equality of dataset ms and the first major star in the natal Mệnh palace; null means no major star',

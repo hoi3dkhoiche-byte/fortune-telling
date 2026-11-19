@@ -1,7 +1,7 @@
 {
   "status": "ok",
   "schemaVersion": "tuvi.natal.v0",
-  "hash": "556d5f52db6d24a3808badf56cc9b019aab9b7eef772e7912f7280582709e380",
+  "hash": "ef33ddf15a79223552d599925acc4094a2651b2845e258eed24576e91569b759",
   "profile": {
     "id": "repro-v4",
     "brightnessSchool": "XD2",
@@ -14,6 +14,7 @@
     "repository": "https://github.com/Renhuai123/ziwei-doushu",
     "sourceCommit": null,
     "vendorSnapshotSha256": "a6bc42349f47a9fcbdcca7f2c1f0c2120e919dd6a79476bd42a3021a1f0cc062",
+    "runtimeDependenciesSha256": "75c26bc6bd13b94fbfd907675580487c03a32b71658c5c3cd657856887bdf0d7",
     "dependencies": {
       "iztro": "2.6.1",
       "lunar-javascript": "1.7.7"

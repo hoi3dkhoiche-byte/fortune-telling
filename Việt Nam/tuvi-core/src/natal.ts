@@ -1,10 +1,16 @@
 import { generateChart, setBrightnessSchool } from '../vendor/ziwei/algorithm';
 import manifest from '../vendor/manifest.json';
+import dependencyLock from '../package-lock.json';
 import { canonicalHash } from './canonical';
 import { validateProfile } from './profiles';
 import { buildFacts, buildRelations } from './facts';
 import { buildLabels } from './i18n';
 import type { ChartReady, NatalChart, Profile } from './types';
+
+const runtimePackages = Object.fromEntries(Object.entries(dependencyLock.packages)
+  .filter(([path, entry]) => path !== '' && !('dev' in entry && entry.dev))
+  .map(([path, entry]) => [path, { version: entry.version, integrity: 'integrity' in entry ? entry.integrity : null }]));
+const runtimeDependenciesSha256 = canonicalHash(runtimePackages);
 
 export function validateChartReady(value: unknown): asserts value is ChartReady {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('ChartReady phải là object.');
@@ -42,7 +48,7 @@ export function computeNatal(input: ChartReady, profile: Profile, options: { inc
     setBrightnessSchool('default');
   }
   // Metadata enters the digest too: identical profile IDs with different values must not collide.
-  const identity = { schemaVersion: 'tuvi.natal.v0', engine: manifest.snapshotSha256, profile, natal };
+  const identity = { schemaVersion: 'tuvi.natal.v0', engine: manifest.snapshotSha256, runtimeDependenciesSha256, profile, natal };
   const result = {
     schemaVersion: 'tuvi.natal.v0' as const,
     hash: canonicalHash(identity),
@@ -51,7 +57,8 @@ export function computeNatal(input: ChartReady, profile: Profile, options: { inc
       repository: manifest.repository,
       sourceCommit: manifest.sourceCommit,
       vendorSnapshotSha256: manifest.snapshotSha256,
-      dependencies: manifest.engineDependencies,
+      runtimeDependenciesSha256,
+      dependencies: { ...manifest.engineDependencies },
       calendar: 'upstream-chinese-lunar' as const,
     },
     natal,

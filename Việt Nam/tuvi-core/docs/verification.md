@@ -2,6 +2,7 @@
 
 ## Đã thực thi
 
+- Ngày kiểm tra 18/11/2026: **42/42 test qua**, build/typecheck qua, 10 file vendor khớp hash. Một lượt `npm ci --offline --ignore-scripts` trong thư mục cài sạch cũng thành công; ví dụ chart, birth và batch đã được thực thi. Runtime Node 24.14.1, ICU 78.2, tzdb 2025c.
 - Test package gồm hash/cấu hình, nhãn Việt/dữ kiện, lịch, IANA, chuẩn hóa input, streaming dataset và CLI. Test ngày chạy giả lập 2030/2040 xác nhận bản mệnh và hash không phụ thuộc thời điểm hiện tại.
 - Đối chiếu đủ 8.760 khóa năm 1990, checksum file nguồn khớp: `repro-v4` khớp trường `ms` 8.760/8.760; `thienky-candidate` khớp 8.432/8.760, lệch 328, toàn bộ nằm trong tháng nhuận.
 - So hai mô hình lịch trên 28.124 ngày từ 1950–2026: 1.137 ngày khác nhau; năm 1990 không khác. Đây là so sánh **lịch Trung upstream với mô hình thiên văn UTC+7**, chưa phải kiểm chứng mọi lịch Việt chính thức qua lịch sử.

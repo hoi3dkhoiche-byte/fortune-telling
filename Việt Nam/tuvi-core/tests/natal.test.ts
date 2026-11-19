@@ -28,6 +28,8 @@ test('same input/profile/source has stable hash and caller data is not mutated',
   assert.equal(JSON.stringify({ example, profile }), original);
   first.natal.palaces[0].name = 'mutated';
   assert.notEqual(computeNatal(example, profile).natal.palaces[0].name, 'mutated');
+  first.provenance.dependencies.iztro = 'mutated';
+  assert.equal(computeNatal(example, profile).provenance.dependencies.iztro, '2.6.1');
 });
 
 test('natal hash ignores execution date across years', () => {
