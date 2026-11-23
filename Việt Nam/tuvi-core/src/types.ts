@@ -36,9 +36,14 @@ export type NeedsReason =
   | 'NEEDS_BIRTH_TIME' | 'HOUR_BOUNDARY' | 'CALENDAR_DIVERGENCE'
   | 'CALENDAR_CONFIRMATION' | 'AMBIGUOUS_LOCAL_TIME' | 'NONEXISTENT_LOCAL_TIME'
   | 'NEEDS_BIRTH_PLACE';
+export interface AmbiguousTimeOption {
+  chart: ChartReady;
+  instant: string;
+  utcOffsetMinutes: number;
+}
 export type NormalizationResult =
   | { status: 'ok'; chart: ChartReady; audit: AuditStep[]; warnings: string[] }
-  | { status: 'needs'; reason: NeedsReason; scenarios?: ChartReady[]; audit: AuditStep[]; warnings: string[] };
+  | { status: 'needs'; reason: NeedsReason; scenarios?: ChartReady[]; scenarioOptions?: AmbiguousTimeOption[]; audit: AuditStep[]; warnings: string[] };
 export type NatalChart = Omit<ZiweiChart, 'currentAge' | 'currentDaXianIndex' | 'palaces' | 'analysisCacheProfile'> & {
   palaces: Array<Omit<Palace, 'isCurrentDaXian'>>;
 };
