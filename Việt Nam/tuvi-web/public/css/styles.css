@@ -944,3 +944,100 @@ html, body {
     padding: 12px 18px;
   }
 }
+.verification {
+  margin: 0.75rem auto;
+  padding: 0.75rem 1rem;
+  color: var(--text-main, #e2e8f0);
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.verification summary {
+  color: #fde047;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.verification section, .verification ol, .verification-warnings {
+  margin-block: 0.75rem;
+}
+
+.verification pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-block: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.fact-list {
+  padding-inline-start: 1.25rem;
+}
+
+.alert-box {
+  padding: 0.75rem;
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.alert-error {
+  color: #fca5a5;
+  background: rgba(127, 29, 29, 0.55);
+}
+
+.alert-warning {
+  color: #fde047;
+  background: rgba(120, 53, 15, 0.55);
+}
+
+#scenario-modal-body .scenario-card {
+  margin-block-start: 0.6rem;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(3, 7, 18, 0.75);
+}
+
+.modal-content {
+  width: min(100%, 38rem);
+  max-height: 85dvh;
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 0.75rem;
+  background: #0f172a;
+}
+
+.modal-header, .scenario-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.modal-header {
+  margin-block-end: 0.75rem;
+}
+
+.scenario-card {
+  padding: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 0.5rem;
+}
