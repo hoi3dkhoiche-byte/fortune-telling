@@ -23,20 +23,13 @@
       </div>
 
       <div class="header-badges">
-        <span class="badge-tag candidate" title="Hệ phái Thiên Kỷ: Bảng sáng XD2, nhuận tháng sau, Tý thuộc ngày cũ">
-          Profile: thienky-candidate [Đang kiểm chứng]
-        </span>
-      </div>
-
-      <div class="header-actions">
-        <button class="btn btn-secondary btn-sm" id="break-toggle-btn" type="button" title="Thử nghiệm dữ liệu biên theo kỹ năng break-ui">
-          Dữ liệu kiểm thử
-        </button>
+        <span class="badge-tag" id="profile-badge"></span>
+        <span class="badge-tag hidden" id="sample-badge">Lá số mẫu</span>
       </div>
     </header>
 
     <!-- Global Alert Container -->
-    <div id="global-alert-container" style="padding: 10px 20px 0 20px;"></div>
+    <div id="global-alert-container" aria-live="polite" style="padding: 10px 20px 0 20px;"></div>
 
     <!-- ======================================================================
          MÀN HÌNH 1: NHẬP DỮ KIỆN LẬP SỐ (COSMIC PORTAL)
@@ -100,7 +93,7 @@
                   <span>Chưa rõ giờ sinh</span>
                 </label>
               </div>
-              <input class="form-input" type="time" id="birth-time" value="12:30" />
+              <input class="form-input" type="time" id="birth-time" aria-label="Giờ và phút sinh" />
             </div>
 
             <!-- Giới tính -->
@@ -122,7 +115,7 @@
             <div class="form-group">
               <label class="form-label" for="tz-select">Múi giờ nơi sinh</label>
               <select class="form-select" id="tz-select">
-                <option value="Asia/Ho_Chi_Minh" selected>Asia/Ho_Chi_Minh (Việt Nam UTC+7)</option>
+                <option value="Asia/Ho_Chi_Minh" selected>Asia/Ho_Chi_Minh (Việt Nam)</option>
                 <option value="Asia/Bangkok">Asia/Bangkok (Thái Lan UTC+7)</option>
                 <option value="Etc/GMT-7">Etc/GMT-7 (Cố định UTC+7)</option>
                 <option value="Asia/Singapore">Asia/Singapore (Singapore UTC+8)</option>
@@ -141,13 +134,13 @@
 
             <!-- Tùy chọn nâng cao -->
             <div class="form-group" style="margin-top: 4px;">
-              <button class="btn btn-ghost btn-sm" id="adv-toggle" type="button" style="padding-left: 0;">
-                <span class="toggle-icon">▸</span> Tùy chọn nâng cao (Tọa độ, Quy ước)
+              <button class="btn btn-ghost btn-sm" id="adv-toggle" type="button" aria-controls="adv-content" aria-expanded="false" style="padding-left: 0;">
+                <span class="toggle-icon">▸</span> Tùy chọn nâng cao
               </button>
               <div class="collapsed" id="adv-content" style="display: none; flex-direction: column; gap: 10px; margin-top: 8px;">
-                <div class="row-2">
-                  <input class="form-input" type="number" id="place-lat" placeholder="Vĩ độ (lat)" step="0.0001" />
-                  <input class="form-input" type="number" id="place-lon" placeholder="Kinh độ (lon)" step="0.0001" />
+                <div class="row-2 hidden" id="place-coordinates">
+                  <input class="form-input" type="number" id="place-lat" aria-label="Vĩ độ nơi sinh" placeholder="Vĩ độ" min="-90" max="90" step="any" disabled />
+                  <input class="form-input" type="number" id="place-lon" aria-label="Kinh độ nơi sinh" placeholder="Kinh độ" min="-180" max="180" step="any" disabled />
                 </div>
                 <select class="form-select" id="cal-convention">
                   <option value="" selected>Tự động so sánh lịch (Mặc định)</option>
@@ -169,6 +162,10 @@
               <button class="btn btn-secondary" id="sample-btn" type="button">
                 Khám Phá Lá Số Mẫu
               </button>
+              <button class="btn btn-ghost btn-sm" id="open-json-btn" type="button" style="align-self: center; opacity: 0.7;">
+                Mở file lá số JSON
+              </button>
+              <input type="file" id="json-file-input" accept=".json" style="display: none;" />
             </div>
           </form>
         </div>
@@ -187,7 +184,7 @@
 
         <div style="display: flex; align-items: center; gap: 8px;">
           <button class="btn btn-primary btn-sm" id="top-goto-reading-btn" type="button" style="background: linear-gradient(135deg, #9333EA, #D97706); box-shadow: 0 0 12px rgba(147, 51, 234, 0.4);">
-            Luận giải lá số
+            Dữ kiện lá số
           </button>
 
           <div class="view-mode-tabs" role="tablist">
@@ -240,16 +237,16 @@
         </aside>
       </div>
 
-      <!-- Nút Khổng Lồ: Tiến Tới Luận Giải Lá Số -->
+      <div id="chart-verification"></div>
       <div class="reading-action-bar">
         <button class="btn-reading-huge" id="goto-reading-btn" type="button">
-          Luận giải lá số (Hệ phái Thiên Kỷ)
+          Xem dữ kiện lá số
         </button>
       </div>
     </section>
 
     <!-- ======================================================================
-         MÀN HÌNH 3: LUẬN GIẢI CHUYÊN SÂU (READING VIEW)
+         MÀN HÌNH 3: DỮ KIỆN LÁ SỐ
          ====================================================================== -->
     <section class="view-screen hidden" id="view-reading">
       <div class="chart-screen-header">
@@ -257,39 +254,24 @@
           ‹ Quay lại Bàn Cờ Lá Số
         </button>
         <span style="font-family: var(--font-serif); font-weight: 700; color: #FDE047;">
-          LUẬN GIẢI MỆNH BÀN — HỆ PHÁI THIÊN KỶ
+          DỮ KIỆN LÁ SỐ
         </span>
       </div>
 
       <div class="reading-screen-wrapper" id="reading-container"></div>
     </section>
 
-    <!-- Modal chọn kịch bản ranh giờ (HOUR_BOUNDARY) -->
+    <!-- Xác nhận phương án giờ sinh -->
     <div class="modal-backdrop hidden" id="scenario-modal">
-      <div class="modal-content">
+      <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="scenario-modal-title">
         <div class="modal-header">
-          <div class="modal-title">Xác Nhận Ranh Giới Giờ Sinh</div>
-          <button class="btn btn-ghost btn-sm" id="scenario-modal-close" type="button">✕</button>
+          <div class="modal-title" id="scenario-modal-title">Xác nhận giờ sinh</div>
+          <button class="btn btn-ghost btn-sm" id="scenario-modal-close" type="button" aria-label="Đóng phần xác nhận giờ sinh">✕</button>
         </div>
         <div class="modal-body" id="scenario-modal-body"></div>
       </div>
     </div>
 
-    <!-- Modal thử nghiệm dữ liệu biên (break-ui) -->
-    <div class="modal-backdrop hidden" id="break-modal">
-      <div class="modal-content" style="max-width: 600px;">
-        <div class="modal-header">
-          <div class="modal-title">Kiểm Thử Dữ Liệu Biên (break-ui)</div>
-          <button class="btn btn-ghost btn-sm" id="break-modal-close" type="button">✕</button>
-        </div>
-        <div class="modal-body">
-          <p style="font-size: 0.85rem; color: #94A3B8; margin-bottom: 8px;">
-            Các trường hợp thực tế khắc nghiệt (adversarial worst-cases) để kiểm tra giao diện không bị vỡ bố cục hay lỗi logic:
-          </p>
-          <div id="break-modal-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
-        </div>
-      </div>
-    </div>
   </div>
 
   <script type="module" src="/js/app.js"></script>
