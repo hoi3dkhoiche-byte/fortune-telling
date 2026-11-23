@@ -105,12 +105,20 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
   audit.push({ step: 'calendar-comparison', description: 'Compared upstream Chinese lunar date with an astronomical fixed-UTC+7 model.', data: { ...comparison } });
   if (comparison.different) {
     if (input.calendarConvention !== 'chinese') {
-      warnings.push('The engine uses the Chinese lunar calendar. Vietnamese-calendar charting on this divergent date requires a separate engine adapter; no corrected chart was invented.');
+      warnings.push('CALENDAR_DIVERGENCE_NO_ADAPTER');
       return needs('CALENDAR_DIVERGENCE');
     }
-    warnings.push('Chinese and fixed-UTC+7 lunar dates differ. The explicit chinese convention is used.');
+    warnings.push('CALENDAR_DIVERGENCE_CHINESE_EXPLICIT');
   }
-  if (input.calendarConvention === 'vietnamese') warnings.push('Vietnamese calendar checking uses an astronomical fixed-UTC+7 model, not all historical official calendars.');
+  if (input.calendarConvention === 'vietnamese') warnings.push('VIETNAMESE_CALENDAR_MODEL');
+  function selectableScenario(chart: ChartReady): boolean {
+    if (input.calendarConvention === 'chinese' || formatDate(chart) === formatDate(date)) return true;
+    const checked = compareCalendars(chart);
+    if (!checked.different) return true;
+    const warning = `SCENARIO_BLOCKED_DIVERGENCE:${formatDate(chart)}`;
+    if (!warnings.includes(warning)) warnings.push(warning);
+    return false;
+  }
   if (input.time === null) return needs('NEEDS_BIRTH_TIME');
   if (profile.solarTime !== 'none' && !input.place) return needs('NEEDS_BIRTH_PLACE');
   const [hour, minute] = input.time.split(':').map(Number);
@@ -118,7 +126,24 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
   audit.push({ step: 'iana-time-zone', description: 'Resolved the birth-time offset from Node ICU/IANA data; retained gaps and overlaps.', data: { ...zone } });
   if (zone.status === 'nonexistent') return needs('NONEXISTENT_LOCAL_TIME');
   if (zone.status === 'ambiguous') {
-    return needs('AMBIGUOUS_LOCAL_TIME', zone.candidates.map(candidate => chartAt(date, timeCorrection(date, hour, minute, input, profile, candidate).seconds, input.gender, profile)));
+    const allOptions = zone.candidates.map(candidate => ({
+      ...candidate,
+      chart: chartAt(date, timeCorrection(date, hour, minute, input, profile, candidate).seconds, input.gender, profile),
+    }));
+    const scenarioOptions = allOptions.filter(option => selectableScenario(option.chart));
+    const blockedOptions = allOptions.filter(option => !selectableScenario(option.chart));
+    if (blockedOptions.length > 0) {
+      audit.push({ step: 'blocked-scenarios', description: 'Scenarios blocked by calendar divergence filter.', data: { blocked: blockedOptions.map(o => o.chart) } });
+    }
+    if (scenarioOptions.length === 0) return needs('CALENDAR_DIVERGENCE');
+    return {
+      status: 'needs',
+      reason: 'AMBIGUOUS_LOCAL_TIME',
+      scenarios: uniqueCharts(scenarioOptions.map(option => option.chart)),
+      scenarioOptions,
+      audit,
+      warnings,
+    };
   }
   const candidate = zone.candidates[0];
   const correction = timeCorrection(date, hour, minute, input, profile, candidate);
@@ -134,7 +159,7 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
     const shiftedComparison = compareCalendars(chart);
     audit.push({ step: 'shifted-calendar-comparison', description: 'Checked the engine date after solar-time/late-Zi day movement.', data: { ...shiftedComparison } });
     if (shiftedComparison.different && input.calendarConvention !== 'chinese') {
-      warnings.push('The shifted engine date falls on a Chinese/Vietnamese calendar divergence.');
+      warnings.push('SHIFTED_DATE_DIVERGENCE');
       return needs('CALENDAR_DIVERGENCE');
     }
   }
@@ -151,8 +176,14 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
   const correctionChangesChart = profile.solarTime !== 'none' && key(uncorrectedChart) !== key(chart);
   if (correctionChangesChart) scenarios.push(uncorrectedChart);
   if ((nearBoundary || correctionChangesChart) && uniqueCharts(scenarios).length > 1) {
-    audit.push({ step: 'boundary-scenarios', description: 'Returned distinct chart-ready scenarios instead of silently selecting across a branch/day boundary.', data: { boundaryMinutes, nearBoundary, correctionChangesChart, scenarios: uniqueCharts(scenarios) } });
-    return needs('HOUR_BOUNDARY', scenarios);
+    const allUnique = uniqueCharts(scenarios);
+    const selectable = allUnique.filter(selectableScenario);
+    const blocked = allUnique.filter(s => !selectableScenario(s));
+    if (blocked.length > 0) {
+      audit.push({ step: 'blocked-scenarios', description: 'Scenarios blocked by calendar divergence filter.', data: { blocked } });
+    }
+    audit.push({ step: 'boundary-scenarios', description: 'Returned selectable chart-ready scenarios for the branch/day boundary.', data: { boundaryMinutes, nearBoundary, correctionChangesChart, scenarios: selectable } });
+    return needs('HOUR_BOUNDARY', selectable);
   }
   return { status: 'ok', chart, audit, warnings };
 }
