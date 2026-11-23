@@ -1,28 +1,28 @@
 # Thiên Kỷ Web — Giao Diện Tử Vi Đẩu Số Vũ Trụ
 
-Ứng dụng web hiện đại, đậm chất chiêm tinh vũ trụ (Cosmic Space Theme) kết hợp chuẩn xác thuật toán Tử Vi Đẩu Số của `@tuvi/core` theo hệ phái Thiên Kỷ (dựa trên giáo trình của Thầy Nghê Hải Hà).
+Giao diện lập và tra cứu dữ kiện lá số bằng `@tuvi/core`. Có cấu hình Thiên Kỷ đang kiểm chứng và cấu hình đối chiếu dataset v4.
 
 ---
 
 ## 1. Điểm nổi bật & Cải tiến thiết kế
 
-1. **Tách biệt 2 màn hình riêng biệt (Two-Step Flow)**:
+1. **Ba màn hình**:
    - **Màn hình 1 (Cosmic Portal)**: Giao diện nhập dữ kiện thanh lịch, huyền bí ở trung tâm không gian với hiệu ứng tinh tú lấp lánh.
    - **Màn hình 2 (Bàn Cờ Lá Số 4×4)**: Không gian chiêm nghiệm tinh bàn toàn màn hình, có nút quay lại nhập dữ kiện khác bất cứ lúc nào.
-   - **Màn hình 3 (Luận Giải Chuyên Sâu)**: Nút bấm nổi bật **"🔮 Tiến Tới Luận Giải Lá Số ✨"** mở ra bảng luận giải toàn diện theo nguyên lý Thiên Kỷ.
+   - **Dữ kiện lá số** hiển thị Mệnh, Thân, Cục, Tứ Hóa và khoảng tuổi đại hạn từ facts của core.
 
 2. **Bố cục Sao Chuẩn Mực Tử Vi Việt Nam**:
-   - **Sao Đẹp (Cát tinh, Chính tinh miếu/vượng/đắc, Hóa Lộc/Quyền/Khoa)**: Nằm gọn gàng ở **CỘT TRÁI** màu vàng kim / ngọc bích phát sáng.
-   - **Sao Xấu (Sát tinh, Ám tinh, Bại tinh, Hóa Kỵ, Chính tinh hãm)**: Nằm ở **CỘT PHẢI** màu đỏ thẫm / tím huyền bí.
+   - Cột phải hiển thị nhóm sát/hung tinh, Hóa Kỵ và sao độ sáng thấp.
+   - Cột trái hiển thị các sao còn lại. Độ sáng lấy từ dữ liệu engine khi có.
 
 3. **Chủ đề Vũ Trụ Sâu Thẳm (Cosmic Deep Space)**:
    - Nền không gian đen huyền ảo kết hợp tinh vân tím và bụi sao vàng ấm.
    - Canvas hạt sao tương tác (`#starfield-canvas`): 160+ vì sao nhấp nháy, chòm sao nối theo chuột, sao băng lướt qua bầu trời.
    - Vòng Tinh Bàn Thiên Thể (Cosmic Astrolabe Mandala) xoay chậm 60fps ở trung tâm lá số.
 
-4. **Trải nghiệm Nhân Văn & Bỏ Hoàn Toàn Mã JSON Thô**:
-   - Gỡ bỏ toàn bộ raw JSON viewer, hash kỹ thuật, JSON pointer gây khô khan.
-   - Thay vào đó là luận giải Mệnh - Thân - Cục, Tứ Hóa chuyển vận, Thập niên đại hạn và đạo lý tu thân hành sự.
+4. **Thông tin kiểm chứng**:
+   - Bàn lá số tách dữ kiện sinh khỏi ngày giờ lập số, bao gồm cờ tháng nhuận.
+   - Mục thu gọn chứa cấu hình, phiên bản nguồn, hash, cảnh báo và các bước chuẩn hóa hoặc xác nhận.
 
 ---
 
@@ -31,9 +31,12 @@
 Yêu cầu: Node.js (>= 24.14.1)
 
 ```powershell
-cd "Việt Nam/tuvi-web"
-npm test     # Chạy bộ kiểm thử (14 tests)
-npm start    # Khởi động máy chủ tại http://localhost:3000
+cd "Việt Nam/tuvi-core"
+npm.cmd ci
+npm.cmd run build
+cd "../tuvi-web"
+npm.cmd test
+npm.cmd start
 ```
 
 ---
@@ -46,7 +49,8 @@ Việt Nam/tuvi-web/
 ├── package.json            # Cấu hình package & scripts test/start
 ├── tests/
 │   ├── api.test.js         # Kiểm thử API endpoint: /api/natal, /api/sample, /api/profiles
-│   └── star-partition.test.js # Kiểm thử quy tắc phân chia sao Cát (Trái) / Sát (Phải)
+│   ├── reading.test.js     # Kiểm thử dữ kiện của màn tổng hợp
+│   └── star-partition.test.js # Kiểm thử nhóm sao, sao mượn và ngày hiển thị
 └── public/
     ├── index.html          # Khung ứng dụng 3 màn hình
     ├── assets/
@@ -62,8 +66,8 @@ Việt Nam/tuvi-web/
         ├── form.js         # Xử lý form ngày giờ & kịch bản ranh giờ
         ├── chart.js        # Bàn cờ 4x4, phân cột sao trái/phải, đường liên hệ SVG
         ├── details.js      # Chi tiết cung đang chọn
-        ├── reading.js      # Luận giải Mệnh, Thân, Cục, Tứ Hóa, Đại hạn
-        └── break-ui.js     # Thử nghiệm dữ liệu biên (break-ui skill)
+        ├── reading.js      # Màn dữ kiện Mệnh, Thân, Cục, Tứ Hóa, Đại hạn
+        └── verification.js # Thông tin nguồn, cảnh báo và audit
 ```
 
 ---
@@ -74,6 +78,8 @@ Việt Nam/tuvi-web/
 - `GET /api/profiles`: Danh sách profiles (`thienky-candidate`, `repro-v4`) và bằng chứng kiểm chứng.
 - `GET /api/sample`: Trả về lá số mẫu minh họa 1990 với 12 cung đã gắn nhãn Việt.
 - `POST /api/natal`:
-  - Body: `{ birth: BirthInput, profileId: string, selectedScenario?: ChartReady }`
-  - Trả về `200` khi tính toán thành công.
-  - Trả về `422` kèm `reason: 'HOUR_BOUNDARY' | 'NEEDS_BIRTH_TIME' | 'CALENDAR_DIVERGENCE'` khi cần người dùng làm rõ dữ kiện.
+  - Nhận `{ birth: BirthInput, profileId?: string, selectedScenario?: ChartReady, selectedInstant?: string }`.
+  - Trả `200` cùng `normalization.input`, `chart`, `audit` và `warnings` khi lập số thành công.
+  - Trả `422` với `reason` khi cần bổ sung giờ, nơi sinh, quy ước lịch hoặc xác nhận ranh giờ và thay đổi đồng hồ địa phương.
+  - Gửi lại dữ kiện sinh và `selectedScenario` từ phản hồi khi xác nhận ranh giờ. Với giờ đồng hồ xảy ra hai lần, gửi lại cả chart và instant từ cùng một phần tử `scenarioOptions`.
+  - Trả `400` cho JSON hoặc lựa chọn sai, và `413` khi body vượt 1 MiB. Trang và API phục vụ cùng origin.
