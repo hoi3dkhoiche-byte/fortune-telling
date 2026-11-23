@@ -5,6 +5,15 @@ const core = require('../tuvi-core');
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.resolve(__dirname, 'public');
+const MAX_BODY_BYTES = 1024 * 1024;
+
+class RequestError extends Error {
+  constructor(statusCode, message, details) {
+    super(message);
+    this.statusCode = statusCode;
+    this.details = details;
+  }
+}
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -32,58 +41,95 @@ function sendJson(res, statusCode, data) {
 
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
-    let raw = '';
-    req.setEncoding('utf8');
-    req.on('data', chunk => {
-      raw += chunk;
-      if (raw.length > 1024 * 1024) {
-        reject(new RangeError('Payload quá lớn (giới hạn 1MB).'));
-      }
-    });
-    req.on('end', () => {
-      if (!raw.trim()) {
-        resolve({});
-        return;
-      }
-      try {
-        resolve(JSON.parse(raw));
-      } catch (err) {
-        reject(new TypeError('JSON trong request không đúng cú pháp: ' + err.message));
-      }
-    });
-    req.on('error', reject);
-  });
-}
-
-function serveStatic(req, res, pathname) {
-  const safePath = pathname === '/' ? '/index.html' : pathname;
-  const filePath = path.resolve(PUBLIC_DIR, '.' + safePath);
-
-  // Path traversal check
-  if (!filePath.startsWith(PUBLIC_DIR)) {
-    sendJson(res, 403, { status: 'error', error: 'Truy cập bị từ chối.' });
-    return;
-  }
-
-  fs.stat(filePath, (err, stats) => {
-    if (err || !stats.isFile()) {
-      sendJson(res, 404, { status: 'error', error: 'Không tìm thấy tài nguyên: ' + pathname });
+    const oversized = () => new RequestError(413, 'Dữ liệu gửi lên vượt giới hạn 1 MiB.');
+    req.once('error', reject);
+    if (Number(req.headers['content-length']) > MAX_BODY_BYTES) {
+      req.resume();
+      reject(oversized());
       return;
     }
 
-    const ext = path.extname(filePath).toLowerCase();
-    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-    res.writeHead(200, {
-      'Content-Type': contentType,
-      'Content-Length': stats.size,
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
+    const chunks = [];
+    let size = 0;
+    let tooLarge = false;
+    req.on('data', chunk => {
+      if (tooLarge) return;
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        tooLarge = true;
+        chunks.length = 0;
+        reject(oversized());
+        return;
+      }
+      chunks.push(chunk);
     });
-    fs.createReadStream(filePath).pipe(res);
+    req.once('end', () => {
+      if (tooLarge) return;
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks, size).toString('utf8')));
+      } catch {
+        reject(new RequestError(400, 'JSON trong yêu cầu không đúng cú pháp.'));
+      }
+    });
+    req.once('aborted', () => reject(new RequestError(400, 'Yêu cầu bị ngắt trước khi gửi đủ dữ liệu.')));
   });
 }
 
+function isInsideDirectory(directory, filePath) {
+  const relative = path.relative(directory, filePath);
+  return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+function resolveStaticPath(pathname) {
+  let decodedPath;
+  try {
+    decodedPath = decodeURIComponent(pathname);
+  } catch {
+    throw new RequestError(400, 'Đường dẫn không đúng định dạng.');
+  }
+  if (!decodedPath.startsWith('/') || /[\\:\0]/.test(decodedPath) || decodedPath.split('/').includes('..')) {
+    throw new RequestError(403, 'Truy cập bị từ chối.');
+  }
+  const filePath = path.resolve(PUBLIC_DIR, decodedPath === '/' ? 'index.html' : `.${decodedPath}`);
+  if (!isInsideDirectory(PUBLIC_DIR, filePath)) {
+    throw new RequestError(403, 'Truy cập bị từ chối.');
+  }
+  return filePath;
+}
+
+async function serveStatic(res, pathname) {
+  const filePath = resolveStaticPath(pathname);
+  let realPath;
+  let stats;
+  try {
+    realPath = await fs.promises.realpath(filePath);
+    const realPublicDir = await fs.promises.realpath(PUBLIC_DIR);
+    if (!isInsideDirectory(realPublicDir, realPath)) {
+      throw new RequestError(403, 'Truy cập bị từ chối.');
+    }
+    stats = await fs.promises.stat(realPath);
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+      throw new RequestError(404, 'Không tìm thấy tài nguyên.');
+    }
+    throw error;
+  }
+  if (!stats.isFile()) throw new RequestError(404, 'Không tìm thấy tài nguyên.');
+
+  const ext = path.extname(realPath).toLowerCase();
+  res.writeHead(200, {
+    'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
+    'Content-Length': stats.size,
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+  });
+  const stream = fs.createReadStream(realPath);
+  stream.once('error', error => res.destroy(error));
+  res.once('close', () => stream.destroy());
+  stream.pipe(res);
+}
+
 function matchScenario(candidate, scenario) {
-  if (!scenario || typeof scenario !== 'object') return false;
+  if (!scenario || typeof scenario !== 'object' || Array.isArray(scenario)) return false;
   return (
     candidate.year === scenario.year &&
     candidate.month === scenario.month &&
@@ -93,20 +139,35 @@ function matchScenario(candidate, scenario) {
   );
 }
 
-const server = http.createServer(async (req, res) => {
-  // CORS headers for local inspection
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+function chartResponse(birth, profile, chart, audit, warnings) {
+  const result = core.computeNatal(chart, profile);
+  return {
+    status: 'ok',
+    ...result,
+    displayNatal: core.decorateNatal(result.natal),
+    normalization: { input: birth, chart, audit, warnings },
+  };
+}
 
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
+function chooseScenario(normalized, selectedScenario, selectedInstant) {
+  if (normalized.status === 'needs' && normalized.reason === 'HOUR_BOUNDARY' && selectedInstant === undefined) {
+    const chart = normalized.scenarios?.find(candidate => matchScenario(candidate, selectedScenario));
+    if (chart) return { chart };
   }
+  if (normalized.status === 'needs' && normalized.reason === 'AMBIGUOUS_LOCAL_TIME' && typeof selectedInstant === 'string') {
+    const option = normalized.scenarioOptions?.find(candidate =>
+      candidate.instant === selectedInstant && matchScenario(candidate.chart, selectedScenario));
+    if (option) return option;
+  }
+  throw new RequestError(400, 'Lựa chọn không khớp với bất kỳ kịch bản hợp lệ nào của dữ liệu hiện tại.', {
+    validScenarios: normalized.scenarios,
+    scenarioOptions: normalized.scenarioOptions,
+  });
+}
 
-  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  const pathname = parsedUrl.pathname;
+const server = http.createServer(async (req, res) => {
+  // Keep the request pathname intact until the static path resolver checks it.
+  const pathname = (req.url || '').split('?', 1)[0];
 
   try {
     // 1. Health check
@@ -133,39 +194,22 @@ const server = http.createServer(async (req, res) => {
     // 3. Sample chart
     if (req.method === 'GET' && pathname === '/api/sample') {
       const profile = core.getProfile('thienky-candidate');
-      const sampleReady = {
-        year: 1990,
-        month: 1,
-        day: 1,
-        hourBranch: 6,
+      const birth = {
+        calendar: 'solar',
+        date: '1990-01-01',
+        time: '12:30',
+        tz: 'Asia/Ho_Chi_Minh',
         gender: 'male',
       };
-      const result = core.computeNatal(sampleReady, profile);
-      const displayNatal = core.decorateNatal(result.natal);
-
+      const normalized = core.normalizeBirth(birth, profile);
+      if (normalized.status !== 'ok') throw new Error('Dữ liệu lá số mẫu cần được xem lại.');
       sendJson(res, 200, {
-        status: 'ok',
+        ...chartResponse(birth, profile, normalized.chart, normalized.audit, [
+          ...normalized.warnings,
+          'Đây là lá số mẫu minh họa, không phải kết quả tính từ dữ kiện vừa nhập.',
+        ]),
         isSample: true,
         title: 'Lá số mẫu minh họa (01/01/1990 lúc 12:30, Nam, TP. Hồ Chí Minh)',
-        displayNatal,
-        natal: result.natal,
-        facts: result.facts,
-        relations: result.relations,
-        labels: result.labels,
-        hash: result.hash,
-        profile: result.profile,
-        provenance: result.provenance,
-        normalization: {
-          chart: sampleReady,
-          audit: [
-            {
-              step: 'sample-baseline',
-              description: 'Lá số mẫu chuẩn của năm 1990 từ bộ kiểm thử hồi quy',
-              data: { sampleReady, profileId: profile.id },
-            },
-          ],
-          warnings: ['Đây là lá số mẫu minh họa, không phải kết quả tính từ dữ kiện vừa nhập.'],
-        },
       });
       return;
     }
@@ -173,136 +217,70 @@ const server = http.createServer(async (req, res) => {
     // 4. Compute Natal
     if (req.method === 'POST' && pathname === '/api/natal') {
       const body = await parseJsonBody(req);
-      const { birth, profileId = 'thienky-candidate', selectedScenario } = body;
-
-      if (!birth || typeof birth !== 'object') {
-        sendJson(res, 400, {
-          status: 'error',
-          error: 'Thiếu trường dữ liệu birth trong body request.',
-        });
-        return;
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        throw new RequestError(400, 'Dữ liệu gửi lên phải là một đối tượng JSON.');
       }
-
+      const { birth, profileId = 'thienky-candidate', selectedScenario, selectedInstant } = body;
+      if (!birth || typeof birth !== 'object' || Array.isArray(birth)) {
+        throw new RequestError(400, 'Trường birth phải là một đối tượng JSON.');
+      }
+      if (typeof profileId !== 'string') throw new RequestError(400, 'Mã cấu hình phải là chuỗi.');
       let profile;
       try {
         profile = core.getProfile(profileId);
-      } catch (err) {
-        sendJson(res, 400, {
-          status: 'error',
-          error: `Profile '${profileId}' không hợp lệ hoặc không tồn tại: ${err.message}`,
-        });
-        return;
+      } catch {
+        throw new RequestError(400, 'Cấu hình không hợp lệ hoặc không tồn tại.');
       }
 
-      // 1. Chạy chuẩn hóa
       let normalized;
       try {
         normalized = core.normalizeBirth(birth, profile);
-      } catch (err) {
-        sendJson(res, 400, {
-          status: 'error',
-          error: `Dữ liệu đầu vào không hợp lệ: ${err.message}`,
-        });
-        return;
-      }
-
-      // 2. Nếu cần làm rõ (needs)
-      if (normalized.status === 'needs') {
-        // Trường hợp HOUR_BOUNDARY và người dùng gửi selectedScenario
-        if (normalized.reason === 'HOUR_BOUNDARY' && selectedScenario) {
-          // Kiểm tra selectedScenario có nằm trong scenarios đã chuẩn hóa không
-          const isValidScenario = (normalized.scenarios || []).some(s =>
-            matchScenario(s, selectedScenario)
-          );
-
-          if (!isValidScenario) {
-            sendJson(res, 400, {
-              status: 'error',
-              error: 'selectedScenario không khớp với bất kỳ kịch bản hợp lệ nào được tính toán từ input gốc.',
-              validScenarios: normalized.scenarios,
-            });
-            return;
-          }
-
-          // Tính lá số theo kịch bản người dùng chọn
-          const result = core.computeNatal(selectedScenario, profile);
-          const displayNatal = core.decorateNatal(result.natal);
-
-          const selectionAuditStep = {
-            step: 'user-scenario-selection',
-            description: 'Người dùng đã xác nhận kịch bản ranh giờ sinh cụ thể.',
-            data: { selectedScenario },
-          };
-
-          sendJson(res, 200, {
-            status: 'ok',
-            schemaVersion: result.schemaVersion,
-            hash: result.hash,
-            profile: result.profile,
-            provenance: result.provenance,
-            displayNatal,
-            natal: result.natal,
-            facts: result.facts,
-            relations: result.relations,
-            labels: result.labels,
-            normalization: {
-              chart: selectedScenario,
-              audit: [...normalized.audit, selectionAuditStep],
-              warnings: normalized.warnings,
-            },
-          });
-          return;
+      } catch (error) {
+        if (error instanceof RangeError || error instanceof TypeError) {
+          throw new RequestError(400, `Dữ liệu đầu vào không hợp lệ. ${error.message}`);
         }
+        throw error;
+      }
 
-        // Các trường hợp needs khác hoặc chưa chọn scenario
-        sendJson(res, 422, {
-          status: 'needs',
-          reason: normalized.reason,
-          scenarios: normalized.scenarios,
-          audit: normalized.audit,
-          warnings: normalized.warnings,
-          profile,
-        });
+      if (selectedScenario != null || selectedInstant !== undefined) {
+        const { chart, instant, utcOffsetMinutes } = chooseScenario(normalized, selectedScenario, selectedInstant);
+        const selectionAudit = {
+          step: 'user-scenario-selection',
+          description: 'Người dùng đã xác nhận kịch bản giờ sinh.',
+          data: {
+            reason: normalized.reason,
+            selectedScenario: chart,
+            ...(instant === undefined ? {} : { selectedInstant: instant, utcOffsetMinutes }),
+          },
+        };
+        sendJson(res, 200, chartResponse(birth, profile, chart, [...normalized.audit, selectionAudit], normalized.warnings));
         return;
       }
 
-      // 3. Chuẩn hóa thành công (status: 'ok')
-      const result = core.computeNatal(normalized.chart, profile);
-      const displayNatal = core.decorateNatal(result.natal);
-
-      sendJson(res, 200, {
-        status: 'ok',
-        schemaVersion: result.schemaVersion,
-        hash: result.hash,
-        profile: result.profile,
-        provenance: result.provenance,
-        displayNatal,
-        natal: result.natal,
-        facts: result.facts,
-        relations: result.relations,
-        labels: result.labels,
-        normalization: {
-          chart: normalized.chart,
-          audit: normalized.audit,
-          warnings: normalized.warnings,
-        },
-      });
+      if (normalized.status === 'needs') {
+        sendJson(res, 422, { ...normalized, profile });
+        return;
+      }
+      sendJson(res, 200, chartResponse(birth, profile, normalized.chart, normalized.audit, normalized.warnings));
       return;
     }
 
     // Serve static files
     if (req.method === 'GET') {
-      serveStatic(req, res, pathname);
+      await serveStatic(res, pathname);
       return;
     }
 
     sendJson(res, 405, { status: 'error', error: `Phương thức ${req.method} không được hỗ trợ.` });
-  } catch (err) {
-    console.error('Unhandled server error:', err);
-    sendJson(res, 500, {
-      status: 'error',
-      error: 'Lỗi máy chủ nội bộ: ' + (err.message || String(err)),
-    });
+  } catch (error) {
+    if (res.destroyed) return;
+    if (error instanceof RequestError) {
+      sendJson(res, error.statusCode, { status: 'error', error: error.message, ...error.details });
+      return;
+    }
+    console.error('Unhandled server error:', error);
+    if (res.headersSent) res.destroy();
+    else sendJson(res, 500, { status: 'error', error: 'Máy chủ gặp lỗi khi xử lý yêu cầu.' });
   }
 });
 
@@ -312,4 +290,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, sendJson, parseJsonBody, matchScenario };
+module.exports = { server, sendJson, parseJsonBody, matchScenario, resolveStaticPath, isInsideDirectory };

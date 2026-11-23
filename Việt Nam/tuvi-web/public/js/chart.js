@@ -1,9 +1,114 @@
-/**
- * Quản lý Bàn Cờ Lá Số 4x4 — Phong Cách Vũ Trụ Sâu Thẳm (Cosmic Space)
- * Quy tắc cốt lõi: Sao Đẹp (Cát tinh) nằm bên TRÁI, Sao Xấu (Sát tinh) nằm bên PHẢI
- */
+/** Hiển thị lá số và các quan hệ cung do engine trả về. */
 
 import { state } from './state.js';
+
+const BRANCH_NAMES = ['Tý', 'Sửu', 'Dần', 'Mão', 'Thìn', 'Tỵ', 'Ngọ', 'Mùi', 'Thân', 'Dậu', 'Tuất', 'Hợi'];
+const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const BRIGHTNESS_CLASSES = new Map([
+  ['庙', 'b-miao'], ['旺', 'b-wang'], ['得', 'b-de'], ['利', 'b-li'],
+  ['平', 'b-ping'], ['地', 'b-ping'], ['不', 'b-xian'], ['闲', 'b-xian'], ['陷', 'b-xian'],
+]);
+const TRANSFORMATION_MARKS = new Map([
+  ['禄', { label: 'Lộc', className: 'sh-lu' }], ['权', { label: 'Quyền', className: 'sh-quan' }],
+  ['科', { label: 'Khoa', className: 'sh-ke' }], ['忌', { label: 'Kỵ', className: 'sh-ji' }],
+]);
+
+export function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => HTML_ESCAPES[character]);
+}
+
+export function getStarBrightness(star) {
+  return {
+    label: star.brightnessLabelVi || star.brightnessRaw || '',
+    className: BRIGHTNESS_CLASSES.get(star.brightnessRaw) || (star.brightness === 'dim' ? 'b-xian' : ''),
+  };
+}
+
+export function getStarTransformation(star) {
+  const mark = TRANSFORMATION_MARKS.get(star.siHua);
+  const label = star.siHuaLabelVi || (mark && `Hóa ${mark.label}`) || star.siHua || '';
+  return { label, shortLabel: mark?.label ?? label, className: mark?.className ?? '' };
+}
+
+/** CLI exports already carry the labels needed to build the same display view. */
+export function getDisplayNatal(result) {
+  if (result?.displayNatal) return result.displayNatal;
+  const { natal, labels } = result ?? {};
+  if (!Array.isArray(natal?.palaces)) return null;
+  if (!Array.isArray(labels?.palaces)) return natal;
+
+  const palaces = new Map(labels.palaces.map(palace => [palace.sourceName, palace]));
+  return {
+    ...natal,
+    wuxingJuLabelVi: labels.wuxingJu?.labelVi,
+    mingZhuLabelVi: labels.mingZhu?.labelVi,
+    shenZhuLabelVi: labels.shenZhu?.labelVi,
+    palaces: natal.palaces.map(palace => {
+      const label = palaces.get(palace.name);
+      if (!label) return palace;
+      const stars = new Map((label.stars ?? []).map(star => [star.sourceName, star]));
+      return {
+        ...palace, id: label.id, labelVi: label.labelVi,
+        stemLabelVi: label.stem?.labelVi, branchLabelVi: label.branch?.labelVi,
+        stars: palace.stars.map(star => {
+          const starLabel = stars.get(star.name);
+          return starLabel ? {
+            ...star, id: starLabel.id, labelVi: starLabel.labelVi,
+            brightnessLabelVi: starLabel.brightness?.labelVi,
+            siHuaLabelVi: starLabel.transformation?.labelVi,
+          } : star;
+        }),
+      };
+    }),
+  };
+}
+
+export function getBorrowedStars(palace, natal, facts) {
+  const opposite = natal.palaces.find(entry => entry.branch === palace.borrowedFromBranch);
+  const sourceStars = opposite?.stars ?? natal.palaces.flatMap(entry => entry.stars);
+  const borrowedNames = new Set(palace.borrowedStars ?? []);
+  const borrowedIds = new Set((facts ?? [])
+    .filter(fact => fact.predicate === 'BORROWS_OPPOSITE_MAJOR_STAR' && fact.subjectId === palace.id)
+    .map(fact => fact.objectId));
+  const labels = new Map(sourceStars
+    .filter(star => star.type === 'major' && (borrowedNames.has(star.name) || borrowedIds.has(star.id)))
+    .map(star => [star.name, star.labelVi || star.name]));
+  for (const name of borrowedNames) if (!labels.has(name)) labels.set(name, name);
+  return [...labels.values()];
+}
+
+function formatDate(date) {
+  if (!Number.isInteger(date?.year) || !Number.isInteger(date?.month) || !Number.isInteger(date?.day)) return '';
+  return `${date.year}-${String(Math.abs(date.month)).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`;
+}
+
+export function getBirthDates(result) {
+  const normalization = result.normalization;
+  const audit = normalization?.audit ?? [];
+  const auditData = step => audit.find(item => item.step === step)?.data;
+  const input = normalization?.input ?? auditData('input');
+  const lunarConversion = auditData('lunar-to-solar');
+  const comparison = auditData('calendar-comparison');
+  const natal = result.natal ?? result.displayNatal;
+  const effectiveLunar = natal?.lunarInfo;
+  const originalLunar = lunarConversion?.input ?? comparison?.chinese;
+  const inputIsLeap = input?.calendar === 'lunar' && (input.isLeap ?? lunarConversion?.input?.isLeap);
+  const effectiveLunarDate = formatDate({
+    year: effectiveLunar?.lunarYear, month: effectiveLunar?.lunarMonth, day: effectiveLunar?.lunarDay,
+  });
+  return {
+    inputCalendar: input?.calendar,
+    inputDate: input?.date ? `${input.date}${inputIsLeap ? ' (Nhuận)' : ''}` : '',
+    inputTime: input?.time ?? '',
+    civilSolarDate: input?.calendar === 'solar' ? input.date : formatDate(lunarConversion?.solar ?? comparison?.solar),
+    originalLunarDate: input?.calendar === 'lunar' && input.date
+      ? `${input.date}${inputIsLeap ? ' (Nhuận)' : ''}`
+      : originalLunar && `${formatDate(originalLunar)}${originalLunar.isLeap ? ' (Nhuận)' : ''}`,
+    effectiveSolarDate: formatDate(normalization?.chart ?? natal?.birthInfo),
+    effectiveLunarDate: effectiveLunarDate && `${effectiveLunarDate}${effectiveLunar.isLeapMonth ? ' (Nhuận)' : ''}`,
+    hourBranch: normalization?.chart?.hourBranch ?? natal?.birthInfo?.hour,
+  };
+}
 
 // Danh sách sát tinh, bại tinh, hung tinh theo truyền thống Tử Vi Việt Nam
 const BAD_STAR_NAMES = new Set([
@@ -17,25 +122,15 @@ const BAD_STAR_NAMES = new Set([
 ]);
 
 export function partitionStars(stars) {
-  const leftStars = [];  // Sao đẹp / Cát tinh / Chính tinh tốt
-  const rightStars = []; // Sao xấu / Sát tinh / Bại tinh / Ám tinh
+  const leftStars = [];
+  const rightStars = [];
 
   stars.forEach(star => {
-    const nameVi = star.labelVi || star.name;
-    const isBad = BAD_STAR_NAMES.has(nameVi);
-    const isSha = star.type === 'sha';
-    const isJi = star.siHua === 'ji' || star.siHua === '忌' || star.siHuaLabelVi === 'Hóa Kỵ';
-    const isXian = star.brightnessRaw === 'xian' || star.brightnessRaw === '陷';
-
-    if (isBad || isSha || isJi) {
-      rightStars.push(star);
-    } else if (star.type === 'major' && isXian) {
-      // Chính tinh hãm địa đặt bên phải
-      rightStars.push(star);
-    } else {
-      // Chính tinh miếu/vượng/đắc, cát tinh, lộc/quyền/khoa đặt bên trái
-      leftStars.push(star);
-    }
+    const usesRightColumn = star.type === 'sha'
+      || BAD_STAR_NAMES.has(star.name) || BAD_STAR_NAMES.has(star.labelVi)
+      || star.siHua === '忌' || star.siHuaLabelVi === 'Hóa Kỵ'
+      || star.brightness === 'dim' || BRIGHTNESS_CLASSES.get(star.brightnessRaw) === 'b-xian';
+    (usesRightColumn ? rightStars : leftStars).push(star);
   });
 
   return { leftStars, rightStars };
@@ -47,8 +142,6 @@ export function setupChart() {
   const svgOverlay = document.getElementById('relations-svg');
   const centerCell = document.getElementById('center-cell');
   const mobileCardList = document.getElementById('mobile-card-list');
-
-  const branchNames = ['Tý', 'Sửu', 'Dần', 'Mão', 'Thìn', 'Tỵ', 'Ngọ', 'Mùi', 'Thân', 'Dậu', 'Tuất', 'Hợi'];
 
   // Gắn sự kiện click cho 12 ô cung
   chartGrid.querySelectorAll('.palace-cell').forEach(cell => {
@@ -91,16 +184,16 @@ export function setupChart() {
       return;
     }
 
-    const natal = currentNatal.displayNatal || currentNatal.natal;
+    const natal = getDisplayNatal(currentNatal);
     if (!natal || !Array.isArray(natal.palaces)) return;
 
     const activeRelations = currentNatal.relations?.find(r => r.branch === selectedBranch);
 
     // 1. Cập nhật 12 ô Cung trên Bàn Cờ
     natal.palaces.forEach(palace => {
-      const cell = chartGrid.querySelector(`.palace-cell[data-branch="${palace.branch}"]`);
+      const cell = getPalaceCell(palace.branch);
       if (cell) {
-        updatePalaceCell(cell, palace, selectedBranch, activeRelations, currentNatal.facts);
+        updatePalaceCell(cell, palace, selectedBranch, activeRelations, getBorrowedStars(palace, natal, currentNatal.facts));
       }
     });
 
@@ -108,7 +201,7 @@ export function setupChart() {
     updateCenterArea(centerCell, currentNatal, isSample, userName);
 
     // 3. Cập nhật Mobile Card List
-    renderMobileCards(mobileCardList, natal.palaces, selectedBranch);
+    renderMobileCards(mobileCardList, natal, selectedBranch, currentNatal.facts);
 
     // 4. Vẽ đường liên hệ SVG
     if (showRelationLines && selectedBranch !== null && activeRelations) {
@@ -116,6 +209,11 @@ export function setupChart() {
     } else {
       svgOverlay.innerHTML = '';
     }
+  }
+
+  function getPalaceCell(branch) {
+    if (!Number.isInteger(branch) || branch < 0 || branch > 11) return null;
+    return chartGrid.querySelector(`.palace-cell[data-branch="${branch}"]`);
   }
 
   function renderEmptyState() {
@@ -133,12 +231,14 @@ export function setupChart() {
       </div>
     `;
     svgOverlay.innerHTML = '';
+    mobileCardList.replaceChildren();
 
     chartGrid.querySelectorAll('.palace-cell').forEach(cell => {
       const b = Number(cell.dataset.branch);
+      cell.classList.remove('active', 'rel-opposite', 'rel-trine');
       cell.innerHTML = `
         <div class="cell-top">
-          <div class="cell-palace-name">Cung ${branchNames[b]}</div>
+          <div class="cell-palace-name">Cung ${BRANCH_NAMES[b]}</div>
           <div class="cell-can-chi">Chi ${b}</div>
         </div>
         <div class="cell-columns-container" style="justify-content: center; align-items: center; opacity: 0.3;">
@@ -146,13 +246,13 @@ export function setupChart() {
         </div>
         <div class="cell-bottom">
           <span>—</span>
-          <span>${branchNames[b]}</span>
+          <span>${BRANCH_NAMES[b]}</span>
         </div>
       `;
     });
   }
 
-  function updatePalaceCell(cell, palace, selectedBranch, activeRelations, facts) {
+  function updatePalaceCell(cell, palace, selectedBranch, activeRelations, borrowedStars) {
     const isSelected = palace.branch === selectedBranch;
 
     cell.classList.remove('active', 'rel-opposite', 'rel-trine');
@@ -167,14 +267,9 @@ export function setupChart() {
       }
     }
 
-    // Bố cục phân đôi: Sao đẹp (Cát) bên TRÁI, Sao xấu (Sát) bên PHẢI
     const { leftStars, rightStars } = partitionStars(palace.stars);
     const majorStars = palace.stars.filter(s => s.type === 'major');
     const isEmpty = majorStars.length === 0;
-
-    const borrowedStarFacts = (facts || []).filter(
-      f => f.predicate === 'BORROWS_OPPOSITE_MAJOR_STAR' && f.subjectId === palace.id
-    );
 
     const daXianRange = palace.daXianAge ? `${palace.daXianAge[0]} - ${palace.daXianAge[1]}` : (palace.ages ? `${palace.ages[0]} - ${palace.ages[1]}` : '—');
 
@@ -182,31 +277,28 @@ export function setupChart() {
       <!-- Header Cung -->
       <div class="cell-top">
         <div class="cell-palace-name">
-          ${palace.labelVi || palace.name}
+          ${escapeHtml(palace.labelVi || palace.name)}
           ${palace.isMingGong || palace.isMingPalace ? '<span class="badge-ming">MỆNH</span>' : ''}
           ${palace.isBodyPalace || palace.isShenGong ? '<span class="badge-body">THÂN</span>' : ''}
         </div>
         <div class="cell-can-chi">
-          ${palace.stemLabelVi || ''} ${palace.branchLabelVi || ''}
+          ${escapeHtml(palace.stemLabelVi)} ${escapeHtml(palace.branchLabelVi)}
         </div>
       </div>
 
-      <!-- Thân Ô Cung: 2 Cột (Trái: Cát Tinh, Phải: Sát Tinh) -->
       <div class="cell-columns-container">
-        <!-- Cột Trái: Sao Tốt, Cát Tinh -->
         <div class="star-col col-left">
           ${isEmpty ? '<div class="empty-badge">[Vô chính diệu]</div>' : ''}
           ${leftStars.map(s => renderStarTag(s, true)).join('')}
 
-          ${isEmpty && borrowedStarFacts.length > 0 ? `
+          ${isEmpty && borrowedStars.length > 0 ? `
             <div class="borrowed-stars-box">
               <span style="font-size: 0.65rem; color: #94A3B8;">Mượn:</span>
-              ${borrowedStarFacts.map(f => `<span class="borrowed-star">${f.objectId.replace('STAR.', '')}</span>`).join('')}
+              ${borrowedStars.map(name => `<span class="borrowed-star">${escapeHtml(name)}</span>`).join('')}
             </div>
           ` : ''}
         </div>
 
-        <!-- Cột Phải: Sao Xấu, Sát Tinh, Bại Tinh -->
         <div class="star-col col-right">
           ${rightStars.map(s => renderStarTag(s, false)).join('')}
         </div>
@@ -214,49 +306,26 @@ export function setupChart() {
 
       <!-- Footer Cung: Đại Hạn & Vị trí -->
       <div class="cell-bottom">
-        <span class="daxian-badge">ĐH: ${daXianRange}</span>
-        <span style="font-size: 0.65rem; color: #64748B;">${palace.branchLabelVi || palace.branch}</span>
+        <span class="daxian-badge">ĐH: ${escapeHtml(daXianRange)}</span>
+        <span style="font-size: 0.65rem; color: #64748B;">${escapeHtml(palace.branchLabelVi || palace.branch)}</span>
       </div>
     `;
   }
 
-  function renderStarTag(star, isGood) {
+  function renderStarTag(star, isLeftColumn) {
     const isMajor = star.type === 'major';
-    const brightness = star.brightnessLabelVi || star.brightnessRaw || '';
-    const brightnessCls = getBrightnessClass(star.brightnessRaw);
-
-    const sihua = star.siHuaLabelVi || star.siHua || '';
-    const sihuaCls = getSihuaClass(star.siHua);
-
-    let starCls = 'star-item ';
-    if (isMajor) starCls += 'star-major ';
-    if (isGood) starCls += 'good-star ';
-    else starCls += 'bad-star ';
-
-    // Độ sáng: typography thanh lịch trong ngoặc đơn (M), (V), (Đ), (L), (B), (H)
-    // Không dùng ô nền màu đặc thô kệch
-    let brightHtml = '';
-    if (brightness) {
-      const char = brightness.charAt(0).toUpperCase();
-      brightHtml = `<span class="star-bright star-bright-${brightnessCls}">(${char})</span>`;
-    }
-
-    // Tứ Hóa: hiển thị viên nhãn tinh tế [Lộc], [Quyền], [Khoa], [Kỵ] với viền mảnh bán trong suốt
-    let sihuaHtml = '';
-    if (sihua) {
-      let shortName = 'Hóa';
-      if (sihua.includes('Lộc') || star.siHua === 'lu' || star.siHua === '禄') shortName = 'Lộc';
-      else if (sihua.includes('Quyền') || star.siHua === 'quan' || star.siHua === '权') shortName = 'Quyền';
-      else if (sihua.includes('Khoa') || star.siHua === 'ke' || star.siHua === '科') shortName = 'Khoa';
-      else if (sihua.includes('Kỵ') || star.siHua === 'ji' || star.siHua === '忌') shortName = 'Kỵ';
-
-      sihuaHtml = `<span class="sihua-badge ${sihuaCls}" title="${sihua}">${shortName}</span>`;
-    }
+    const brightness = getStarBrightness(star);
+    const sihua = getStarTransformation(star);
+    const starCls = `star-item ${isMajor ? 'star-major' : ''} ${isLeftColumn ? 'good-star' : 'bad-star'}`;
+    const brightHtml = brightness.label
+      ? `<span class="star-bright star-bright-${brightness.className}" title="${escapeHtml(brightness.label)}">(${escapeHtml(brightness.label.charAt(0))})</span>` : '';
+    const sihuaHtml = sihua.label
+      ? `<span class="sihua-badge ${sihua.className}" title="${escapeHtml(sihua.label)}">${escapeHtml(sihua.shortLabel)}</span>` : '';
 
     return `
       <div class="${starCls}">
         <span class="star-name-wrap">
-          <span class="star-name">${star.labelVi || star.name}</span>
+          <span class="star-name">${escapeHtml(star.labelVi || star.name)}</span>
           ${brightHtml}
         </span>
         ${sihuaHtml}
@@ -264,36 +333,25 @@ export function setupChart() {
     `;
   }
 
-  function getBrightnessClass(raw) {
-    switch (raw) {
-      case '庙': case 'miao': return 'b-miao';
-      case '旺': case 'wang': return 'b-wang';
-      case '得': case 'de':   return 'b-de';
-      case '利': case 'li':   return 'b-li';
-      case '平': case 'ping': return 'b-ping';
-      case '陷': case 'xian': return 'b-xian';
-      default: return '';
-    }
-  }
-
-  function getSihuaClass(raw) {
-    switch (raw) {
-      case '禄': case 'lu':   return 'sh-lu';
-      case '权': case 'quan': return 'sh-quan';
-      case '科': case 'ke':   return 'sh-ke';
-      case '忌': case 'ji':   return 'sh-ji';
-      default: return '';
-    }
-  }
-
   function updateCenterArea(center, currentNatal, isSample, userName) {
-    const natal = currentNatal.displayNatal || currentNatal.natal;
-    const norm = currentNatal.normalization;
+    const natal = getDisplayNatal(currentNatal);
     const birthInfo = natal.birthInfo || {};
-    const lunar = natal.lunarInfo || {};
-
-    const branchNames = ['Tý', 'Sửu', 'Dần', 'Mão', 'Thìn', 'Tỵ', 'Ngọ', 'Mùi', 'Thân', 'Dậu', 'Tuất', 'Hợi'];
-    const hourBranchName = norm?.chart ? branchNames[norm.chart.hourBranch] : (birthInfo.hour !== undefined ? branchNames[birthInfo.hour] : '—');
+    const dates = getBirthDates(currentNatal);
+    const hourBranchName = BRANCH_NAMES[dates.hourBranch];
+    const dateRows = [];
+    if (dates.inputDate) {
+      dateRows.push([dates.inputCalendar === 'lunar' ? 'Âm lịch nhập' : 'Dương lịch nhập', dates.inputDate]);
+    }
+    if (dates.inputCalendar === 'lunar' && dates.civilSolarDate) {
+      dateRows.push(['Quy đổi dương lịch', dates.civilSolarDate]);
+    }
+    if (dates.inputCalendar !== 'lunar' && dates.originalLunarDate) {
+      dateRows.push(['Âm lịch gốc (lịch Trung)', dates.originalLunarDate]);
+    }
+    dateRows.push(['Ngày lập số (dương lịch)', dates.effectiveSolarDate || '—']);
+    dateRows.push(['Âm lịch dùng để an sao', dates.effectiveLunarDate || '—']);
+    if (dates.inputTime) dateRows.push(['Giờ sinh đã nhập', dates.inputTime]);
+    if (hourBranchName) dateRows.push(['Giờ lập số', `Giờ ${hourBranchName}`]);
 
     center.innerHTML = `
       <div class="center-content-wrap">
@@ -302,35 +360,29 @@ export function setupChart() {
         <div style="position: relative; z-index: 3;">
           <div class="center-brand-title">THIÊN KỶ</div>
           <div style="font-size: 0.9rem; font-weight: 700; color: #F8FAFC; margin-bottom: 2px;">
-            ${userName || 'Đương Số'} • ${birthInfo.gender === 'female' ? 'Nữ Mệnh' : 'Nam Mệnh'}
+            ${escapeHtml(userName || 'Đương Số')}${birthInfo.gender === 'female' ? ' • Nữ Mệnh' : birthInfo.gender === 'male' ? ' • Nam Mệnh' : ''}
           </div>
 
           ${isSample ? `<div style="margin: 2px 0;"><span class="badge-tag sample">LÁ SỐ MẪU MINH HỌA</span></div>` : ''}
 
           <div class="center-meta-grid">
-            <div class="meta-item">
-              <span class="meta-label">Dương Lịch:</span>
-              <span class="meta-val">${norm?.chart?.year ?? birthInfo.year}-${String(norm?.chart?.month ?? birthInfo.month).padStart(2, '0')}-${String(norm?.chart?.day ?? birthInfo.day).padStart(2, '0')}</span>
-            </div>
-            <div class="meta-item">
-              <span class="meta-label">Âm Lịch:</span>
-              <span class="meta-val">${lunar.lunarYear ?? '—'}-${String(lunar.lunarMonth ?? '—').padStart(2, '0')}-${String(lunar.lunarDay ?? '—').padStart(2, '0')} ${lunar.isLeapMonth ? '(Nhuận)' : ''}</span>
-            </div>
-            <div class="meta-item">
-              <span class="meta-label">Giờ Sinh:</span>
-              <span class="meta-val">Giờ ${hourBranchName} (Chi ${norm?.chart?.hourBranch ?? birthInfo.hour ?? '—'})</span>
-            </div>
+            ${dateRows.map(([label, value]) => `
+              <div class="meta-item">
+                <span class="meta-label">${label}</span>
+                <span class="meta-val">${escapeHtml(value)}</span>
+              </div>
+            `).join('')}
             <div class="meta-item">
               <span class="meta-label">Cục (Ngũ Hành):</span>
-              <span class="meta-val" style="color: #F59E0B;">${natal.wuxingJuLabelVi || natal.wuxingJuName || '—'}</span>
+              <span class="meta-val" style="color: #F59E0B;">${escapeHtml(natal.wuxingJuLabelVi || natal.wuxingJuName || '—')}</span>
             </div>
             <div class="meta-item">
               <span class="meta-label">Mệnh Chủ:</span>
-              <span class="meta-val">${natal.mingZhuLabelVi || natal.mingZhu || '—'}</span>
+              <span class="meta-val">${escapeHtml(natal.mingZhuLabelVi || natal.mingZhu || '—')}</span>
             </div>
             <div class="meta-item">
               <span class="meta-label">Thân Chủ:</span>
-              <span class="meta-val">${natal.shenZhuLabelVi || natal.shenZhu || '—'}</span>
+              <span class="meta-val">${escapeHtml(natal.shenZhuLabelVi || natal.shenZhu || '—')}</span>
             </div>
           </div>
         </div>
@@ -343,7 +395,7 @@ export function setupChart() {
             <span class="sihua-badge sh-ji">Kỵ</span>
           </div>
           <div style="font-size: 0.7rem; color: #94A3B8; margin-top: 4px;">
-            Trái: Cát tinh • Phải: Sát tinh
+            Cột phải gồm sát/hung tinh, Hóa Kỵ và sao có độ sáng thấp
           </div>
         </div>
       </div>
@@ -361,14 +413,14 @@ export function setupChart() {
     const svgRect = svgOverlay.getBoundingClientRect();
     if (svgRect.width === 0 || svgRect.height === 0) return;
 
-    const activeCell = chartGrid.querySelector(`.palace-cell[data-branch="${selectedBranch}"]`);
+    const activeCell = getPalaceCell(selectedBranch);
     if (!activeCell) return;
 
     const activeCenter = getCellCenter(activeCell, svgRect);
 
     // 1. Đường đối cung: Nét đứt thanh mảnh 1px, độ mờ dịu nhẹ, không glow che chữ
     if (relations.opposite) {
-      const oppCell = chartGrid.querySelector(`.palace-cell[data-branch="${relations.opposite.branch}"]`);
+      const oppCell = getPalaceCell(relations.opposite.branch);
       if (oppCell) {
         const oppCenter = getCellCenter(oppCell, svgRect);
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -385,8 +437,8 @@ export function setupChart() {
 
     // 2. Tam giác tam hợp: Nét mảnh 1px thanh thoát, độ trong suốt cao, không chèn ép chữ
     if (relations.trine && relations.trine.length === 2) {
-      const t1Cell = chartGrid.querySelector(`.palace-cell[data-branch="${relations.trine[0].branch}"]`);
-      const t2Cell = chartGrid.querySelector(`.palace-cell[data-branch="${relations.trine[1].branch}"]`);
+      const t1Cell = getPalaceCell(relations.trine[0].branch);
+      const t2Cell = getPalaceCell(relations.trine[1].branch);
       if (t1Cell && t2Cell) {
         const t1Center = getCellCenter(t1Cell, svgRect);
         const t2Center = getCellCenter(t2Cell, svgRect);
@@ -410,17 +462,18 @@ export function setupChart() {
     };
   }
 
-  function renderMobileCards(container, palaces, selectedBranch) {
+  function renderMobileCards(container, natal, selectedBranch, facts) {
     container.innerHTML = '';
-    palaces.forEach(palace => {
+    natal.palaces.forEach(palace => {
       const card = document.createElement('div');
       card.className = `mobile-palace-card ${palace.branch === selectedBranch ? 'active' : ''}`;
       const { leftStars, rightStars } = partitionStars(palace.stars);
+      const borrowedStars = getBorrowedStars(palace, natal, facts);
 
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div style="font-weight: 700; font-family: var(--font-serif); font-size: 1rem; color: #F8FAFC;">
-            Cung ${palace.labelVi || palace.name} (${palace.stemLabelVi || ''} ${palace.branchLabelVi || ''})
+            Cung ${escapeHtml(palace.labelVi || palace.name)} (${escapeHtml(palace.stemLabelVi)} ${escapeHtml(palace.branchLabelVi)})
           </div>
           <div>
             ${palace.isMingGong || palace.isMingPalace ? '<span class="badge-ming">MỆNH</span>' : ''}
@@ -429,14 +482,15 @@ export function setupChart() {
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.8rem; margin-top: 4px;">
           <div>
-            <span style="color: #F59E0B; font-weight: 600;">Cát tinh:</span>
-            <div style="color: #94A3B8;">${leftStars.map(s => s.labelVi || s.name).join(', ') || 'Không có'}</div>
+            <span style="color: #F59E0B; font-weight: 600;">Các sao còn lại</span>
+            <div style="color: #94A3B8;">${escapeHtml(leftStars.map(s => s.labelVi || s.name).join(', ') || 'Không có')}</div>
           </div>
           <div>
-            <span style="color: #F43F5E; font-weight: 600;">Sát/Hung tinh:</span>
-            <div style="color: #94A3B8;">${rightStars.map(s => s.labelVi || s.name).join(', ') || 'Không có'}</div>
+            <span style="color: #F43F5E; font-weight: 600;">Sát/hung tinh, Hóa Kỵ, độ sáng thấp</span>
+            <div style="color: #94A3B8;">${escapeHtml(rightStars.map(s => s.labelVi || s.name).join(', ') || 'Không có')}</div>
           </div>
         </div>
+        ${borrowedStars.length ? `<p class="borrowed-stars-box">Mượn đối cung ${escapeHtml(borrowedStars.join(', '))}</p>` : ''}
       `;
 
       card.addEventListener('click', () => {
