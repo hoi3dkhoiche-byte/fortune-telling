@@ -28,7 +28,7 @@ export async function fetchSampleChart() {
   }
 }
 
-export async function computeNatalApi(birthInput, profileId, selectedScenario = null) {
+export async function computeNatalApi(birthInput, profileId, selectedScenario, selectedInstant) {
   // Hủy request cũ đang chạy để tránh đè kết quả
   if (activeAbortController) {
     activeAbortController.abort();
@@ -41,6 +41,7 @@ export async function computeNatalApi(birthInput, profileId, selectedScenario = 
       birth: birthInput,
       profileId: profileId || 'thienky-candidate',
       ...(selectedScenario ? { selectedScenario } : {}),
+      ...(selectedInstant ? { selectedInstant } : {}),
     };
 
     const res = await fetch('/api/natal', {
