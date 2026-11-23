@@ -52,6 +52,21 @@ test('boundary checking can be explicitly disabled while preserving deterministi
   if (result.status === 'ok') assert.equal(result.chart.hourBranch, 1);
 });
 
+test('a boundary scenario cannot bypass an unresolved calendar divergence', () => {
+  const input = { ...birth, date: '1968-01-28', time: '23:59', calendarConvention: undefined };
+  const profile = getProfile('thienky-candidate');
+  const result = normalizeBirth(input, profile);
+  assert.equal(result.status, 'needs');
+  if (result.status !== 'needs') return;
+  assert.equal(result.reason, 'HOUR_BOUNDARY');
+  assert.deepEqual(result.scenarios?.map(chart => chart.day), [28]);
+  assert.ok(result.warnings.some(warning => warning.includes('1968-01-29')));
+
+  const confirmed = normalizeBirth({ ...input, calendarConvention: 'chinese' }, profile);
+  assert.equal(confirmed.status, 'needs');
+  if (confirmed.status === 'needs') assert.deepEqual(confirmed.scenarios?.map(chart => chart.day), [28, 29]);
+});
+
 test('lunar input requires leap identity; leap fifth month 1990 maps to June 23', () => {
   const input: BirthInput = { ...birth, calendar: 'lunar', date: '1990-05-01', isLeap: true };
   const result = normalizeBirth(input, getProfile('thienky-candidate'));
@@ -70,7 +85,7 @@ test('calendar disagreements are surfaced, never silently fed to the Chinese eng
   assert.equal(vietnamese.status, 'needs');
   const explicit = normalizeBirth({ ...common, calendarConvention: 'chinese' }, getProfile('repro-v4'));
   assert.equal(explicit.status, 'ok');
-  if (explicit.status === 'ok') assert.ok(explicit.warnings.length > 0);
+  if (explicit.status === 'ok') assert.ok(explicit.warnings.some(w => w === 'CALENDAR_DIVERGENCE_CHINESE_EXPLICIT'));
   const lunar = normalizeBirth({ ...common, calendar: 'lunar', date: '1968-01-01', isLeap: false, calendarConvention: undefined }, getProfile('repro-v4'));
   assert.equal(lunar.status, 'needs');
   if (lunar.status === 'needs') assert.equal(lunar.reason, 'CALENDAR_CONFIRMATION');
@@ -82,7 +97,15 @@ test('IANA detects a skipped and a repeated local clock (New York 2024)', () => 
   if (gap.status === 'needs') assert.equal(gap.reason, 'NONEXISTENT_LOCAL_TIME');
   const overlap = normalizeBirth({ ...birth, date: '2024-11-03', time: '01:30', tz: 'America/New_York' }, getProfile('repro-v4'));
   assert.equal(overlap.status, 'needs');
-  if (overlap.status === 'needs') assert.equal(overlap.reason, 'AMBIGUOUS_LOCAL_TIME');
+  if (overlap.status === 'needs') {
+    assert.equal(overlap.reason, 'AMBIGUOUS_LOCAL_TIME');
+    assert.equal(overlap.scenarios?.length, 1);
+    assert.deepEqual(overlap.scenarioOptions?.map(option => [option.instant, option.utcOffsetMinutes]), [
+      ['2024-11-03T05:30:00.000Z', -240],
+      ['2024-11-03T06:30:00.000Z', -300],
+    ]);
+    assert.ok(overlap.scenarioOptions?.every(option => option.chart.hourBranch === 1));
+  }
   const zone = resolveLocalTime({ year: 2024, month: 11, day: 3, hour: 1, minute: 30 }, 'America/New_York');
   assert.deepEqual(zone.candidates.map(c => c.utcOffsetMinutes), [-240, -300]);
 });
