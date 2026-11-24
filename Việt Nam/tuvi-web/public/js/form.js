@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { computeNatalApi, fetchSampleChart } from './api.js';
-import { translateWarning } from './verification.js';
+import { getBlockedScenarioGuidance, translateWarning, validateImportedChart } from './verification.js';
 
 const branchNames = ['Tý', 'Sửu', 'Dần', 'Mão', 'Thìn', 'Tỵ', 'Ngọ', 'Mùi', 'Thân', 'Dậu', 'Tuất', 'Hợi'];
 
@@ -64,15 +64,40 @@ export function setupForm() {
     modalBody.replaceChildren();
     const intro = document.createElement('p');
     intro.textContent = ambiguous
-      ? 'Giờ đồng hồ này xảy ra hai lần. Chọn độ lệch UTC theo hồ sơ sinh.'
+      ? options.length === 1
+        ? 'Giờ đồng hồ này xảy ra hai lần, nhưng chỉ còn một phương án khả dụng với quy ước lịch hiện tại.'
+        : 'Giờ đồng hồ này xảy ra hai lần. Chọn độ lệch UTC theo hồ sơ sinh.'
       : options.length === 1
-        ? 'Giờ sinh gần ranh giữa hai giờ. Chỉ có một phương án khả dụng với quy ước lịch hiện tại.'
+        ? 'Giờ sinh gần ranh giữa hai giờ hoặc hai ngày lập số. Chỉ có một phương án khả dụng với quy ước lịch hiện tại.'
         : 'Giờ sinh gần ranh giữa hai giờ hoặc hai ngày lập số. Chọn phương án phù hợp với dữ kiện sinh.';
     modalBody.append(intro);
     for (const warning of result.warnings || []) {
       const entry = document.createElement('p');
       entry.textContent = translateWarning(warning);
       modalBody.append(entry);
+    }
+
+    const guidance = getBlockedScenarioGuidance(result, submission?.birth?.calendarConvention);
+    if (guidance) {
+      const guidanceBox = document.createElement('div');
+      guidanceBox.className = 'modal-guidance-box';
+      const guidanceText = document.createElement('p');
+      guidanceText.className = 'modal-guidance';
+      guidanceText.textContent = guidance.message;
+      guidanceBox.append(guidanceText);
+      if (guidance.canOpenChineseConvention) {
+        const openAdvBtn = document.createElement('button');
+        openAdvBtn.className = 'btn btn-secondary btn-sm';
+        openAdvBtn.type = 'button';
+        openAdvBtn.textContent = 'Mở Tùy chọn nâng cao';
+        openAdvBtn.addEventListener('click', () => {
+          closeModal(false);
+          showAdvanced(true);
+          conventionSelect.focus();
+        });
+        guidanceBox.append(openAdvBtn);
+      }
+      modalBody.append(guidanceBox);
     }
 
     for (const { chart, instant, utcOffsetMinutes } of options) {
@@ -197,10 +222,11 @@ export function setupForm() {
     return { birth, profileId: profileSelect.value, userName: byId('user-name').value.trim() || 'Đương số' };
   }
 
-  function showChart(data, userName, isSample) {
+  function showChart(data, userName, isSample, isImported = false) {
     state.setState({
       currentNatal: data,
       isSample,
+      isImported,
       isLoading: false,
       error: null,
       needsInfo: null,
@@ -264,10 +290,9 @@ export function setupForm() {
       const reader = new FileReader();
       reader.onload = () => {
         try {
-          const data = JSON.parse(reader.result);
-          if (!data || typeof data !== 'object') throw new Error('File không chứa dữ liệu lá số hợp lệ.');
-          if (!data.natal && !data.displayNatal) throw new Error('File không chứa dữ liệu lá số (thiếu natal hoặc displayNatal).');
-          showChart(data, data.title || 'Lá số từ file', false);
+          const parsed = JSON.parse(reader.result);
+          const data = validateImportedChart(parsed);
+          showChart(data, data.title || 'Lá số từ file', false, true);
         } catch (error) {
           state.setState({ error: `Không đọc được file: ${error.message}`, needsInfo: null });
         }

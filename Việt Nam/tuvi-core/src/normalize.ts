@@ -119,6 +119,16 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
     if (!warnings.includes(warning)) warnings.push(warning);
     return false;
   }
+  function partitionScenarios<T>(items: T[], getChart: (item: T) => ChartReady): { selectable: T[]; blocked: ChartReady[] } {
+    const selectable: T[] = [];
+    const blocked: ChartReady[] = [];
+    for (const item of items) {
+      const candidateChart = getChart(item);
+      if (selectableScenario(candidateChart)) selectable.push(item);
+      else blocked.push(candidateChart);
+    }
+    return { selectable, blocked: uniqueCharts(blocked) };
+  }
   if (input.time === null) return needs('NEEDS_BIRTH_TIME');
   if (profile.solarTime !== 'none' && !input.place) return needs('NEEDS_BIRTH_PLACE');
   const [hour, minute] = input.time.split(':').map(Number);
@@ -130,10 +140,9 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
       ...candidate,
       chart: chartAt(date, timeCorrection(date, hour, minute, input, profile, candidate).seconds, input.gender, profile),
     }));
-    const scenarioOptions = allOptions.filter(option => selectableScenario(option.chart));
-    const blockedOptions = allOptions.filter(option => !selectableScenario(option.chart));
-    if (blockedOptions.length > 0) {
-      audit.push({ step: 'blocked-scenarios', description: 'Scenarios blocked by calendar divergence filter.', data: { blocked: blockedOptions.map(o => o.chart) } });
+    const { selectable: scenarioOptions, blocked } = partitionScenarios(allOptions, option => option.chart);
+    if (blocked.length > 0) {
+      audit.push({ step: 'blocked-scenarios', description: 'Scenarios blocked by calendar divergence filter.', data: { blocked } });
     }
     if (scenarioOptions.length === 0) return needs('CALENDAR_DIVERGENCE');
     return {
@@ -176,9 +185,7 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
   const correctionChangesChart = profile.solarTime !== 'none' && key(uncorrectedChart) !== key(chart);
   if (correctionChangesChart) scenarios.push(uncorrectedChart);
   if ((nearBoundary || correctionChangesChart) && uniqueCharts(scenarios).length > 1) {
-    const allUnique = uniqueCharts(scenarios);
-    const selectable = allUnique.filter(selectableScenario);
-    const blocked = allUnique.filter(s => !selectableScenario(s));
+    const { selectable, blocked } = partitionScenarios(uniqueCharts(scenarios), candidateChart => candidateChart);
     if (blocked.length > 0) {
       audit.push({ step: 'blocked-scenarios', description: 'Scenarios blocked by calendar divergence filter.', data: { blocked } });
     }

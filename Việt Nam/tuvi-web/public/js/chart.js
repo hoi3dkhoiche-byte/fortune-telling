@@ -169,7 +169,7 @@ export function setupChart() {
   });
 
   function renderChart(s) {
-    const { currentNatal, selectedBranch, showRelationLines, viewMode, isSample, userName } = s;
+    const { currentNatal, selectedBranch, showRelationLines, viewMode, isSample, isImported, userName } = s;
 
     if (viewMode === 'list') {
       boardContainer.classList.add('mode-list');
@@ -198,7 +198,7 @@ export function setupChart() {
     });
 
     // 2. Cập nhật Vùng Trung Tâm
-    updateCenterArea(centerCell, currentNatal, isSample, userName);
+    updateCenterArea(centerCell, currentNatal, isSample, isImported, userName);
 
     // 3. Cập nhật Mobile Card List
     renderMobileCards(mobileCardList, natal, selectedBranch, currentNatal.facts);
@@ -333,7 +333,7 @@ export function setupChart() {
     `;
   }
 
-  function updateCenterArea(center, currentNatal, isSample, userName) {
+  function updateCenterArea(center, currentNatal, isSample, isImported, userName) {
     const natal = getDisplayNatal(currentNatal);
     const birthInfo = natal.birthInfo || {};
     const dates = getBirthDates(currentNatal);
@@ -364,6 +364,7 @@ export function setupChart() {
           </div>
 
           ${isSample ? `<div style="margin: 2px 0;"><span class="badge-tag sample">LÁ SỐ MẪU MINH HỌA</span></div>` : ''}
+          ${isImported ? `<div style="margin: 2px 0;"><span class="badge-tag candidate">MỞ TỪ FILE · CHƯA KIỂM TRA LẠI</span></div>` : ''}
 
           <div class="center-meta-grid">
             ${dateRows.map(([label, value]) => `

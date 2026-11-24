@@ -18,6 +18,7 @@ class AppState {
       profileEvidence: {},       // Bằng chứng profile
       selectedProfileId: 'thienky-candidate',
       isSample: false,           // Đang xem lá số mẫu
+      isImported: false,         // Đang xem lá số mở từ file JSON ngoài (chưa kiểm tra lại)
       userName: '',              // Tên người dùng hiển thị
     };
   }

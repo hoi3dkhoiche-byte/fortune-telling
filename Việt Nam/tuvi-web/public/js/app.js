@@ -27,6 +27,7 @@ function setupViewNavigation() {
   const verification = document.getElementById('chart-verification');
   const profileBadge = document.getElementById('profile-badge');
   const sampleBadge = document.getElementById('sample-badge');
+  const importedBadge = document.getElementById('imported-badge');
   let renderedResult;
   let renderedSummary;
 
@@ -41,6 +42,7 @@ function setupViewNavigation() {
     profileBadge.title = id;
     profileBadge.classList.toggle('candidate', selected?.status === 'candidate' || id === 'thienky-candidate');
     sampleBadge.classList.toggle('hidden', !(s.isSample && s.currentView !== 'input'));
+    importedBadge?.classList.toggle('hidden', !(s.isImported && s.currentView !== 'input'));
 
     if (s.currentNatal !== renderedResult) {
       renderedResult = s.currentNatal;

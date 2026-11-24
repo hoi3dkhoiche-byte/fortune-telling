@@ -7,9 +7,69 @@ const warningLabels = {
 
 export function translateWarning(warning) {
   if (warningLabels[warning]) return warningLabels[warning];
-  const match = /^SCENARIO_BLOCKED_DIVERGENCE:(.+)$/.exec(warning);
-  if (match) return `Phương án ngày ${match[1]} bị chặn do lịch Việt và lịch Trung khác nhau.`;
+  const isoMatch = /^SCENARIO_BLOCKED_DIVERGENCE:(\d{4})-(\d{2})-(\d{2})$/.exec(warning);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `Phương án ngày ${day}/${month}/${year} bị chặn do lịch Việt và lịch Trung khác nhau.`;
+  }
+  const fallbackMatch = /^SCENARIO_BLOCKED_DIVERGENCE:(.+)$/.exec(warning);
+  if (fallbackMatch) return `Phương án ngày ${fallbackMatch[1]} bị chặn do lịch Việt và lịch Trung khác nhau.`;
   return warning;
+}
+
+export function validateImportedChart(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('File không chứa đối tượng JSON hợp lệ.');
+  }
+  if (typeof data.schemaVersion !== 'string' || !data.schemaVersion.trim()) {
+    throw new Error('Thiếu trường schemaVersion trong dữ liệu lá số.');
+  }
+  const natal = data.displayNatal ?? data.natal;
+  if (!natal || typeof natal !== 'object' || Array.isArray(natal)) {
+    throw new Error('File không chứa dữ liệu lá số (thiếu natal hoặc displayNatal).');
+  }
+  if (!Array.isArray(natal.palaces) || natal.palaces.length !== 12) {
+    throw new Error('Dữ liệu lá số phải có đủ 12 cung.');
+  }
+  const branches = new Set();
+  for (const palace of natal.palaces) {
+    if (
+      !palace || typeof palace !== 'object'
+      || !Number.isInteger(palace.branch) || palace.branch < 0 || palace.branch > 11
+      || !Array.isArray(palace.stars)
+    ) {
+      throw new Error('Cấu trúc cung hoặc danh sách sao trong file không hợp lệ.');
+    }
+    branches.add(palace.branch);
+  }
+  if (branches.size !== 12) {
+    throw new Error('12 cung trong lá số phải có đủ 12 địa chi riêng biệt (0–11).');
+  }
+  if (!Number.isInteger(natal.mingGongBranch) || natal.mingGongBranch < 0 || natal.mingGongBranch > 11) {
+    throw new Error('Thiếu vị trí cung Mệnh hợp lệ (mingGongBranch).');
+  }
+  if (!Number.isInteger(natal.shenGongBranch) || natal.shenGongBranch < 0 || natal.shenGongBranch > 11) {
+    throw new Error('Thiếu vị trí cung Thân hợp lệ (shenGongBranch).');
+  }
+  return { ...data, importedFromFile: true };
+}
+
+export function getBlockedScenarioGuidance(result, calendarConvention) {
+  const hasBlocked = Boolean(
+    result?.audit?.some(step => step.step === 'blocked-scenarios')
+    || result?.warnings?.some(warning => typeof warning === 'string' && warning.startsWith('SCENARIO_BLOCKED_DIVERGENCE:')),
+  );
+  if (!hasBlocked) return null;
+  if (calendarConvention === 'vietnamese') {
+    return {
+      message: 'Đang chọn quy ước Lịch Việt Nam nên phương án rơi vào ngày lệch lịch không thể mở được (cần adapter lịch Việt riêng).',
+      canOpenChineseConvention: false,
+    };
+  }
+  return {
+    message: 'Để mở phương án bị chặn, hãy vào Tùy chọn nâng cao và chọn Quy ước Lịch Trung Quốc (chinese).',
+    canOpenChineseConvention: true,
+  };
 }
 
 const stepLabels = {
@@ -39,15 +99,24 @@ function addSection(parent, label, value) {
 
 export function buildVerification(result) {
   if (!result) return null;
+  const imported = Boolean(result.importedFromFile);
   const normalized = result.normalization || result;
   const { audit, warnings } = normalized;
-  if (!audit?.length && !warnings?.length && !result.provenance && !result.hash) return null;
+  if (!imported && !audit?.length && !warnings?.length && !result.provenance && !result.hash) return null;
 
   const details = document.createElement('details');
   details.className = 'verification';
   const summary = document.createElement('summary');
-  summary.textContent = 'Thông tin kiểm chứng';
+  summary.textContent = imported
+    ? 'Thông tin kiểm chứng (Mở từ file · Chưa kiểm tra lại)'
+    : 'Thông tin kiểm chứng';
   details.append(summary);
+  if (imported) {
+    const notice = document.createElement('p');
+    notice.className = 'verification-unverified';
+    notice.textContent = 'Dữ liệu mở từ file JSON ngoài — chưa kiểm tra lại bằng máy chủ. Mã kiểm tra (hash) và thông tin nguồn dưới đây chỉ phản ánh nội dung trong file và có thể đã bị chỉnh sửa.';
+    details.append(notice);
+  }
   if (warnings?.length) {
     const list = document.createElement('ul');
     list.className = 'verification-warnings';
@@ -58,8 +127,8 @@ export function buildVerification(result) {
     }
     details.append(list);
   }
-  addSection(details, 'Nguồn và phiên bản', result.provenance);
-  addSection(details, 'Mã kiểm tra lá số', result.hash);
+  addSection(details, imported ? 'Nguồn và phiên bản (trong file · chưa kiểm tra lại)' : 'Nguồn và phiên bản', result.provenance);
+  addSection(details, imported ? 'Mã kiểm tra lá số (trong file · chưa kiểm tra lại)' : 'Mã kiểm tra lá số', result.hash);
   addSection(details, 'Cấu hình lập số', result.profile);
   if (audit?.length) {
     const steps = document.createElement('ol');

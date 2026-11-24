@@ -60,11 +60,18 @@ test('a boundary scenario cannot bypass an unresolved calendar divergence', () =
   if (result.status !== 'needs') return;
   assert.equal(result.reason, 'HOUR_BOUNDARY');
   assert.deepEqual(result.scenarios?.map(chart => chart.day), [28]);
-  assert.ok(result.warnings.some(warning => warning.includes('1968-01-29')));
+  assert.deepEqual(result.warnings, ['SCENARIO_BLOCKED_DIVERGENCE:1968-01-29']);
+  const blockedStep = result.audit.find(step => step.step === 'blocked-scenarios');
+  assert.deepEqual(blockedStep?.data, {
+    blocked: [{ year: 1968, month: 1, day: 29, hourBranch: 0, gender: 'male' }],
+  });
 
   const confirmed = normalizeBirth({ ...input, calendarConvention: 'chinese' }, profile);
   assert.equal(confirmed.status, 'needs');
-  if (confirmed.status === 'needs') assert.deepEqual(confirmed.scenarios?.map(chart => chart.day), [28, 29]);
+  if (confirmed.status === 'needs') {
+    assert.deepEqual(confirmed.scenarios?.map(chart => chart.day), [28, 29]);
+    assert.equal(confirmed.audit.some(step => step.step === 'blocked-scenarios'), false);
+  }
 });
 
 test('lunar input requires leap identity; leap fifth month 1990 maps to June 23', () => {
@@ -76,19 +83,80 @@ test('lunar input requires leap identity; leap fifth month 1990 maps to June 23'
   assert.throws(() => normalizeBirth(missingLeap, getProfile('repro-v4')));
 });
 
-test('calendar disagreements are surfaced, never silently fed to the Chinese engine as Vietnamese', () => {
+test('calendar disagreements emit standardized warning codes and never silently use Vietnamese on divergent days', () => {
   const common = { ...birth, date: '1968-01-29' };
   const unresolved = normalizeBirth({ ...common, calendarConvention: undefined }, getProfile('repro-v4'));
   assert.equal(unresolved.status, 'needs');
-  if (unresolved.status === 'needs') assert.equal(unresolved.reason, 'CALENDAR_DIVERGENCE');
+  if (unresolved.status === 'needs') {
+    assert.equal(unresolved.reason, 'CALENDAR_DIVERGENCE');
+    assert.deepEqual(unresolved.warnings, ['CALENDAR_DIVERGENCE_NO_ADAPTER']);
+  }
   const vietnamese = normalizeBirth({ ...common, calendarConvention: 'vietnamese' }, getProfile('repro-v4'));
   assert.equal(vietnamese.status, 'needs');
+  if (vietnamese.status === 'needs') {
+    assert.equal(vietnamese.reason, 'CALENDAR_DIVERGENCE');
+    assert.deepEqual(vietnamese.warnings, ['CALENDAR_DIVERGENCE_NO_ADAPTER']);
+  }
+  const vietnameseAgreed = normalizeBirth({ ...birth, calendarConvention: 'vietnamese' }, getProfile('repro-v4'));
+  assert.equal(vietnameseAgreed.status, 'ok');
+  if (vietnameseAgreed.status === 'ok') {
+    assert.deepEqual(vietnameseAgreed.warnings, ['VIETNAMESE_CALENDAR_MODEL']);
+  }
   const explicit = normalizeBirth({ ...common, calendarConvention: 'chinese' }, getProfile('repro-v4'));
   assert.equal(explicit.status, 'ok');
-  if (explicit.status === 'ok') assert.ok(explicit.warnings.some(w => w === 'CALENDAR_DIVERGENCE_CHINESE_EXPLICIT'));
+  if (explicit.status === 'ok') assert.deepEqual(explicit.warnings, ['CALENDAR_DIVERGENCE_CHINESE_EXPLICIT']);
+  const shifted = normalizeBirth({ ...birth, date: '1968-01-28', time: '23:30', calendarConvention: undefined }, getProfile('repro-v4'));
+  assert.equal(shifted.status, 'needs');
+  if (shifted.status === 'needs') {
+    assert.equal(shifted.reason, 'CALENDAR_DIVERGENCE');
+    assert.deepEqual(shifted.warnings, ['SHIFTED_DATE_DIVERGENCE']);
+  }
   const lunar = normalizeBirth({ ...common, calendar: 'lunar', date: '1968-01-01', isLeap: false, calendarConvention: undefined }, getProfile('repro-v4'));
   assert.equal(lunar.status, 'needs');
   if (lunar.status === 'needs') assert.equal(lunar.reason, 'CALENDAR_CONFIRMATION');
+});
+
+test('AMBIGUOUS_LOCAL_TIME filters divergent candidates into blocked-scenarios audit', () => {
+  const profile = { ...getProfile('thienky-candidate'), id: 'solar-ambig-test', solarTime: 'longitude' as const };
+  const input: BirthInput = {
+    calendar: 'solar',
+    date: '1995-09-23',
+    time: '23:30',
+    tz: 'Asia/Beirut',
+    gender: 'male',
+    place: { lat: 0, lon: 45 },
+  };
+  const partial = normalizeBirth(input, profile);
+  assert.equal(partial.status, 'needs');
+  if (partial.status !== 'needs') return;
+  assert.equal(partial.reason, 'AMBIGUOUS_LOCAL_TIME');
+  assert.equal(partial.scenarioOptions?.length, 1);
+  assert.equal(partial.scenarioOptions?.[0].chart.day, 23);
+  assert.deepEqual(partial.warnings, ['SCENARIO_BLOCKED_DIVERGENCE:1995-09-24']);
+  assert.deepEqual(partial.audit.find(step => step.step === 'blocked-scenarios')?.data, {
+    blocked: [{ year: 1995, month: 9, day: 24, hourBranch: 0, gender: 'male' }],
+  });
+
+  const unlocked = normalizeBirth({ ...input, calendarConvention: 'chinese' }, profile);
+  assert.equal(unlocked.status, 'needs');
+  if (unlocked.status === 'needs') {
+    assert.equal(unlocked.reason, 'AMBIGUOUS_LOCAL_TIME');
+    assert.deepEqual(unlocked.scenarioOptions?.map(option => option.chart.day), [23, 24]);
+    assert.equal(unlocked.audit.some(step => step.step === 'blocked-scenarios'), false);
+  }
+
+  const allBlocked = normalizeBirth({ ...input, place: { lat: 0, lon: 60 } }, profile);
+  assert.equal(allBlocked.status, 'needs');
+  if (allBlocked.status === 'needs') {
+    assert.equal(allBlocked.reason, 'CALENDAR_DIVERGENCE');
+    assert.deepEqual(allBlocked.warnings, ['SCENARIO_BLOCKED_DIVERGENCE:1995-09-24']);
+    assert.deepEqual(allBlocked.audit.find(step => step.step === 'blocked-scenarios')?.data, {
+      blocked: [
+        { year: 1995, month: 9, day: 24, hourBranch: 0, gender: 'male' },
+        { year: 1995, month: 9, day: 24, hourBranch: 1, gender: 'male' },
+      ],
+    });
+  }
 });
 
 test('IANA detects a skipped and a repeated local clock (New York 2024)', () => {

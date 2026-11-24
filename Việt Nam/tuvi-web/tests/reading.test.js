@@ -11,9 +11,21 @@ test('màn dữ kiện dùng các fact thật của core và giữ đúng sao m�
   const normalized = normalizeBirth(birth, profile);
   assert.equal(normalized.status, 'ok');
   const result = computeNatal(normalized.chart, profile);
-  const rows = buildFactSummary(result).flatMap(group => group.rows);
+  const groups = buildFactSummary(result);
+  const rows = groups.flatMap(group => group.rows);
   assert.ok(rows.some(row => row.text === 'Mệnh vô chính diệu'));
   assert.ok(rows.some(row => row.text === 'Mượn Thiên Lương từ cung Thiên Di'));
+  const menhGroup = groups.find(group => group.title === 'Mệnh, Thân và Cục');
+  assert.ok(menhGroup);
+  const menhTexts = menhGroup.rows.map(row => row.text);
+  assert.ok(menhTexts[0].startsWith('Mệnh tại '));
+  assert.ok(menhTexts.indexOf('Mệnh vô chính diệu') < menhTexts.findIndex(t => t.startsWith('Mượn ')));
+  const sihuaGroup = groups.find(group => group.title === 'Tứ hóa bản mệnh');
+  assert.ok(sihuaGroup);
+  assert.deepEqual(
+    sihuaGroup.rows.map(row => /Hóa (Lộc|Quyền|Khoa|Kỵ)/.exec(row.text)?.[1]),
+    ['Lộc', 'Quyền', 'Khoa', 'Kỵ'],
+  );
   assert.equal(rows.filter(row => row.id.startsWith('SIHUA.')).length, 4);
   assert.equal(rows.filter(row => row.id.startsWith('DAXIAN.')).length, 12);
   const ids = new Set(result.facts.map(fact => fact.id));
