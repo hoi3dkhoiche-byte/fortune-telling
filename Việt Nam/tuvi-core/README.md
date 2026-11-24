@@ -74,6 +74,8 @@ Các field phụ `lunarInfo.fourPillars`/`fourPillarsLunar` giữ theo upstream:
 - `CALENDAR_CONFIRMATION`, `CALENDAR_DIVERGENCE`.
 - `AMBIGUOUS_LOCAL_TIME`, `NONEXISTENT_LOCAL_TIME`: đồng hồ trùng/không tồn tại do đổi giờ.
 
+Mọi cảnh báo (`warnings`) được trả về dưới dạng mã chuẩn hóa (như `CALENDAR_DIVERGENCE_NO_ADAPTER`, `CALENDAR_DIVERGENCE_CHINESE_EXPLICIT`, `SCENARIO_BLOCKED_DIVERGENCE:<date>`, `SHIFTED_DATE_DIVERGENCE`, `VIETNAMESE_CALENDAR_MODEL`) để lớp giao diện/API dịch thuật nhất quán. Khi kịch bản ranh giờ bị chặn do quy ước lịch khác nhau, bước `blocked-scenarios` sẽ được ghi nhận vào chuỗi `audit` để giữ toàn vẹn dấu vết kiểm chứng.
+
 Mặc định khoảng gần ranh là 2 phút, có thể đặt `--boundary-minutes 0` để tắt tường minh. CLI trả exit **0** khi thành công, **2** khi cần làm rõ, **1** khi lỗi. Batch xuất một envelope mỗi dòng, giữ số dòng nguồn, tiếp tục sau dòng sai; exit 1 ưu tiên hơn 2. Output không được trùng input.
 
 ## Dùng từ TypeScript hoặc Python
