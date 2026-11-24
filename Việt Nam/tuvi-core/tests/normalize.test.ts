@@ -72,6 +72,14 @@ test('a boundary scenario cannot bypass an unresolved calendar divergence', () =
     assert.deepEqual(confirmed.scenarios?.map(chart => chart.day), [28, 29]);
     assert.equal(confirmed.audit.some(step => step.step === 'blocked-scenarios'), false);
   }
+
+  const confirmedVn = normalizeBirth({ ...input, calendarConvention: 'vietnamese' }, profile);
+  assert.equal(confirmedVn.status, 'needs');
+  if (confirmedVn.status === 'needs') {
+    assert.deepEqual(confirmedVn.scenarios?.map(chart => chart.day), [28, 29]);
+    assert.ok(confirmedVn.scenarios?.every(chart => chart.calendarConvention === 'vietnamese'));
+    assert.equal(confirmedVn.audit.some(step => step.step === 'blocked-scenarios'), false);
+  }
 });
 
 test('lunar input requires leap identity; leap fifth month 1990 maps to June 23', () => {
@@ -83,23 +91,24 @@ test('lunar input requires leap identity; leap fifth month 1990 maps to June 23'
   assert.throws(() => normalizeBirth(missingLeap, getProfile('repro-v4')));
 });
 
-test('calendar disagreements emit standardized warning codes and never silently use Vietnamese on divergent days', () => {
+test('calendar disagreements emit standardized warning codes and support explicit Vietnamese adapter', () => {
   const common = { ...birth, date: '1968-01-29' };
   const unresolved = normalizeBirth({ ...common, calendarConvention: undefined }, getProfile('repro-v4'));
   assert.equal(unresolved.status, 'needs');
   if (unresolved.status === 'needs') {
     assert.equal(unresolved.reason, 'CALENDAR_DIVERGENCE');
-    assert.deepEqual(unresolved.warnings, ['CALENDAR_DIVERGENCE_NO_ADAPTER']);
+    assert.deepEqual(unresolved.warnings, ['CALENDAR_DIVERGENCE_CHOICE_REQUIRED']);
   }
   const vietnamese = normalizeBirth({ ...common, calendarConvention: 'vietnamese' }, getProfile('repro-v4'));
-  assert.equal(vietnamese.status, 'needs');
-  if (vietnamese.status === 'needs') {
-    assert.equal(vietnamese.reason, 'CALENDAR_DIVERGENCE');
-    assert.deepEqual(vietnamese.warnings, ['CALENDAR_DIVERGENCE_NO_ADAPTER']);
+  assert.equal(vietnamese.status, 'ok');
+  if (vietnamese.status === 'ok') {
+    assert.equal(vietnamese.chart.calendarConvention, 'vietnamese');
+    assert.deepEqual(vietnamese.warnings, ['CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER', 'VIETNAMESE_CALENDAR_MODEL']);
   }
   const vietnameseAgreed = normalizeBirth({ ...birth, calendarConvention: 'vietnamese' }, getProfile('repro-v4'));
   assert.equal(vietnameseAgreed.status, 'ok');
   if (vietnameseAgreed.status === 'ok') {
+    assert.equal(vietnameseAgreed.chart.calendarConvention, 'vietnamese');
     assert.deepEqual(vietnameseAgreed.warnings, ['VIETNAMESE_CALENDAR_MODEL']);
   }
   const explicit = normalizeBirth({ ...common, calendarConvention: 'chinese' }, getProfile('repro-v4'));
@@ -110,6 +119,12 @@ test('calendar disagreements emit standardized warning codes and never silently 
   if (shifted.status === 'needs') {
     assert.equal(shifted.reason, 'CALENDAR_DIVERGENCE');
     assert.deepEqual(shifted.warnings, ['SHIFTED_DATE_DIVERGENCE']);
+  }
+  const shiftedVn = normalizeBirth({ ...birth, date: '1968-01-28', time: '23:30', calendarConvention: 'vietnamese' }, getProfile('repro-v4'));
+  assert.equal(shiftedVn.status, 'ok');
+  if (shiftedVn.status === 'ok') {
+    assert.deepEqual(shiftedVn.chart, { year: 1968, month: 1, day: 29, hourBranch: 0, gender: 'male', calendarConvention: 'vietnamese' });
+    assert.ok(shiftedVn.warnings.includes('CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER'));
   }
   const lunar = normalizeBirth({ ...common, calendar: 'lunar', date: '1968-01-01', isLeap: false, calendarConvention: undefined }, getProfile('repro-v4'));
   assert.equal(lunar.status, 'needs');

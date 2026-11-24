@@ -42,7 +42,7 @@ CLI có thể chạy trực tiếp như trên, không cần cài global. `bin` t
 
 Phạm vi ngày dương hiện tại **1900–2050**. `time: null` nghĩa là chưa biết giờ. Input âm lịch dùng `calendar: "lunar"`, ngày âm trong `date` và bắt buộc `isLeap: true|false` để phân biệt tháng nhuận. Không truyền trường chưa hỗ trợ như `name`, `clockHour` hoặc giá trị giới tính khác rồi mong code tự đoán.
 
-`calendarConvention: "chinese"` là lựa chọn tường minh để dùng lịch của engine upstream. Nếu không chọn, code so lịch Trung với mô hình thiên văn UTC+7. Khi khác, trả trạng thái cần làm rõ. Chọn `vietnamese` hiện **không** ép engine Trung lập lá số Việt trên ngày khác lịch; nó vẫn trả `CALENDAR_DIVERGENCE`. Việc lập số theo lịch Việt ở những ngày này cần adapter tiếp theo.
+`calendarConvention: "chinese"` là lựa chọn tường minh để dùng lịch của engine upstream. `calendarConvention: "vietnamese"` kích hoạt adapter lịch Việt theo mô hình thiên văn UTC+7 (`vietnamese-astronomical-utc+7`), cho phép lập số theo ngày âm lịch Việt Nam trên toàn bộ giai đoạn 1900–2050 kể cả ~4% ngày lệch lịch (ví dụ `1968-01-29` = Mùng 1 Tết Mậu Thân). Nếu không chọn `calendarConvention`, code so lịch Trung với mô hình thiên văn UTC+7 và trả `CALENDAR_DIVERGENCE` khi hai lịch khác nhau để người dùng xác nhận tường minh.
 
 ## Profile tường minh
 
@@ -74,7 +74,7 @@ Các field phụ `lunarInfo.fourPillars`/`fourPillarsLunar` giữ theo upstream:
 - `CALENDAR_CONFIRMATION`, `CALENDAR_DIVERGENCE`.
 - `AMBIGUOUS_LOCAL_TIME`, `NONEXISTENT_LOCAL_TIME`: đồng hồ trùng/không tồn tại do đổi giờ.
 
-Mọi cảnh báo (`warnings`) được trả về dưới dạng mã chuẩn hóa (như `CALENDAR_DIVERGENCE_NO_ADAPTER`, `CALENDAR_DIVERGENCE_CHINESE_EXPLICIT`, `SCENARIO_BLOCKED_DIVERGENCE:<date>`, `SHIFTED_DATE_DIVERGENCE`, `VIETNAMESE_CALENDAR_MODEL`) để lớp giao diện/API dịch thuật nhất quán. Khi kịch bản ranh giờ bị chặn do quy ước lịch khác nhau, bước `blocked-scenarios` sẽ được ghi nhận vào chuỗi `audit` để giữ toàn vẹn dấu vết kiểm chứng.
+Mọi cảnh báo (`warnings`) được trả về dưới dạng mã chuẩn hóa (như `CALENDAR_DIVERGENCE_CHOICE_REQUIRED`, `CALENDAR_DIVERGENCE_CHINESE_EXPLICIT`, `CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER`, `SCENARIO_BLOCKED_DIVERGENCE:<date>`, `SHIFTED_DATE_DIVERGENCE`, `VIETNAMESE_CALENDAR_MODEL`) để lớp giao diện/API dịch thuật nhất quán. Khi kịch bản ranh giờ bị chặn do quy ước lịch khác nhau, bước `blocked-scenarios` sẽ được ghi nhận vào chuỗi `audit` để giữ toàn vẹn dấu vết kiểm chứng.
 
 Mặc định khoảng gần ranh là 2 phút, có thể đặt `--boundary-minutes 0` để tắt tường minh. CLI trả exit **0** khi thành công, **2** khi cần làm rõ, **1** khi lỗi. Batch xuất một envelope mỗi dòng, giữ số dòng nguồn, tiếp tục sau dòng sai; exit 1 ưu tiên hơn 2. Output không được trùng input.
 

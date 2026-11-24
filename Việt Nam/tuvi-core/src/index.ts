@@ -4,4 +4,5 @@ export { getProfile, validateProfile, PROFILES, PROFILE_EVIDENCE } from './profi
 export { normalizeBirth } from './normalize';
 export { buildFacts, buildRelations } from './facts';
 export { buildLabels, decorateNatal, labelStar, labelPalace, labelBranch } from './i18n';
+export { resolveEffectiveVietnameseLunarDate } from './vietnamese-adapter';
 export type * from './types';

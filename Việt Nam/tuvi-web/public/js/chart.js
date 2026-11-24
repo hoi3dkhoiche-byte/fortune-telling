@@ -90,14 +90,17 @@ export function getBirthDates(result) {
   const lunarConversion = auditData('lunar-to-solar');
   const comparison = auditData('calendar-comparison');
   const natal = result.natal ?? result.displayNatal;
+  const isVietnameseCalendar = result.provenance?.calendar === 'vietnamese-astronomical-utc+7'
+    || normalization?.chart?.calendarConvention === 'vietnamese';
   const effectiveLunar = natal?.lunarInfo;
-  const originalLunar = lunarConversion?.input ?? comparison?.chinese;
+  const originalLunar = lunarConversion?.input ?? (isVietnameseCalendar ? comparison?.vietnamese : comparison?.chinese);
   const inputIsLeap = input?.calendar === 'lunar' && (input.isLeap ?? lunarConversion?.input?.isLeap);
   const effectiveLunarDate = formatDate({
     year: effectiveLunar?.lunarYear, month: effectiveLunar?.lunarMonth, day: effectiveLunar?.lunarDay,
   });
   return {
     inputCalendar: input?.calendar,
+    isVietnameseCalendar,
     inputDate: input?.date ? `${input.date}${inputIsLeap ? ' (Nhuận)' : ''}` : '',
     inputTime: input?.time ?? '',
     civilSolarDate: input?.calendar === 'solar' ? input.date : formatDate(lunarConversion?.solar ?? comparison?.solar),
@@ -346,7 +349,7 @@ export function setupChart() {
       dateRows.push(['Quy đổi dương lịch', dates.civilSolarDate]);
     }
     if (dates.inputCalendar !== 'lunar' && dates.originalLunarDate) {
-      dateRows.push(['Âm lịch gốc (lịch Trung)', dates.originalLunarDate]);
+      dateRows.push([dates.isVietnameseCalendar ? 'Âm lịch gốc (lịch Việt UTC+7)' : 'Âm lịch gốc (lịch Trung)', dates.originalLunarDate]);
     }
     dateRows.push(['Ngày lập số (dương lịch)', dates.effectiveSolarDate || '—']);
     dateRows.push(['Âm lịch dùng để an sao', dates.effectiveLunarDate || '—']);

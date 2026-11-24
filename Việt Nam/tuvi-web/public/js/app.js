@@ -14,7 +14,7 @@ const needsCopy = {
   AMBIGUOUS_LOCAL_TIME: ['Giờ này xảy ra hai lần ở múi giờ nơi sinh. Xác nhận độ lệch UTC ghi trong hồ sơ sinh.', 'Chọn độ lệch UTC'],
   NONEXISTENT_LOCAL_TIME: ['Giờ này bị bỏ qua khi địa phương đổi đồng hồ. Hãy kiểm tra lại ngày, giờ và múi giờ nơi sinh.', 'Kiểm tra giờ sinh'],
   CALENDAR_CONFIRMATION: ['Ngày âm nhập cho kết quả khác nhau theo quy ước lịch. Hãy xác nhận lịch được dùng khi ghi ngày sinh.', 'Chọn quy ước lịch'],
-  CALENDAR_DIVERGENCE: ['Lịch Việt và lịch Trung cho ngày âm khác nhau ở ngày này. Chỉ chọn lịch Trung nếu đó là quy ước bạn muốn dùng để lập số.', 'Xem quy ước lịch'],
+  CALENDAR_DIVERGENCE: ['Lịch Việt và lịch Trung cho ngày âm khác nhau ở ngày này. Hãy chọn quy ước Lịch Việt Nam hoặc Lịch Trung Quốc để lập số.', 'Chọn quy ước lịch'],
 };
 const profileNames = {
   'thienky-candidate': 'Thiên Kỷ · Đang kiểm chứng',

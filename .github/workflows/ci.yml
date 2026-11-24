@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.1'
+
+      - name: Install tuvi-core dependencies
+        working-directory: Việt Nam/tuvi-core
+        run: npm ci --ignore-scripts
+
+      - name: Typecheck tuvi-core
+        working-directory: Việt Nam/tuvi-core
+        run: npm run typecheck
+
+      - name: Verify vendor integrity
+        working-directory: Việt Nam/tuvi-core
+        run: npm run verify:vendor
+
+      - name: Build and test tuvi-core
+        working-directory: Việt Nam/tuvi-core
+        run: npm test
+
+      - name: Test tuvi-web
+        working-directory: Việt Nam/tuvi-web
+        run: npm test

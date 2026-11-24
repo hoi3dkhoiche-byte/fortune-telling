@@ -16,6 +16,7 @@ export interface ChartReady {
   day: number;
   hourBranch: number;
   gender: Gender;
+  calendarConvention?: 'chinese' | 'vietnamese';
 }
 export interface BirthInput {
   calendar: 'solar' | 'lunar';

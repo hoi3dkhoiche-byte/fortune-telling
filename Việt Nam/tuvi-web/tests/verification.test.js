@@ -25,8 +25,10 @@ function createMockDocument() {
 
 test('translateWarning dịch đầy đủ các mã chuẩn hóa và định dạng ngày dd/mm/yyyy', async () => {
   const { translateWarning } = await import('../public/js/verification.js');
+  assert.match(translateWarning('CALENDAR_DIVERGENCE_CHOICE_REQUIRED'), /lịch Việt.*lịch Trung/i);
   assert.match(translateWarning('CALENDAR_DIVERGENCE_NO_ADAPTER'), /lịch Trung Quốc/i);
   assert.match(translateWarning('CALENDAR_DIVERGENCE_CHINESE_EXPLICIT'), /quy ước lịch Trung/i);
+  assert.match(translateWarning('CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER'), /adapter lịch Việt/i);
   assert.match(translateWarning('VIETNAMESE_CALENDAR_MODEL'), /mô hình thiên văn UTC\+7/i);
   assert.match(translateWarning('SHIFTED_DATE_DIVERGENCE'), /sau hiệu chỉnh/i);
   assert.equal(
@@ -118,12 +120,12 @@ test('getBlockedScenarioGuidance chỉ dẫn mở lịch Trung hoặc báo rõ g
   const defaultGuidance = getBlockedScenarioGuidance(blockedResult, undefined);
   assert.equal(defaultGuidance.canOpenChineseConvention, true);
   assert.match(defaultGuidance.message, /Tùy chọn nâng cao/);
+  assert.match(defaultGuidance.message, /Lịch Việt Nam/);
   assert.match(defaultGuidance.message, /Lịch Trung Quốc/);
 
   const vnGuidance = getBlockedScenarioGuidance(blockedResult, 'vietnamese');
   assert.equal(vnGuidance.canOpenChineseConvention, false);
   assert.match(vnGuidance.message, /Lịch Việt Nam/);
-  assert.match(vnGuidance.message, /không thể mở/);
 });
 
 test('buildVerification gắn nhãn chưa kiểm tra lại cho file mở lên và dịch bước blocked-scenarios', async () => {

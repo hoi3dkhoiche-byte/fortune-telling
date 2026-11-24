@@ -9,7 +9,7 @@ import { equationOfTimeMinutes } from '../vendor/ziwei/true-solar-time';
 
 const DAY_SECONDS = 86400;
 const mod = (value: number, divisor: number) => ((value % divisor) + divisor) % divisor;
-const key = (chart: ChartReady) => `${chart.year}-${chart.month}-${chart.day}-${chart.hourBranch}-${chart.gender}`;
+const key = (chart: ChartReady) => `${chart.year}-${chart.month}-${chart.day}-${chart.hourBranch}-${chart.gender}-${chart.calendarConvention ?? ''}`;
 const uniqueCharts = (charts: ChartReady[]) => [...new Map(charts.map(chart => [key(chart), chart])).values()];
 
 function validateInput(value: unknown): asserts value is BirthInput {
@@ -41,14 +41,16 @@ function validateInput(value: unknown): asserts value is BirthInput {
   parseDate(input.date as string, input.calendar);
 }
 
-function chartAt(date: CivilDate, rawSeconds: number, gender: BirthInput['gender'], profile: Profile): ChartReady {
+function chartAt(date: CivilDate, rawSeconds: number, gender: BirthInput['gender'], profile: Profile, calendarConvention?: BirthInput['calendarConvention']): ChartReady {
   const dayOffset = Math.floor(rawSeconds / DAY_SECONDS);
   const seconds = mod(rawSeconds, DAY_SECONDS);
   const hourBranch = seconds >= 23 * 3600 || seconds < 3600 ? 0 : Math.floor((seconds - 3600) / 7200) + 1;
   const ziOffset = profile.lateZi === 'next-day' && seconds >= 23 * 3600 ? 1 : 0;
   const shifted = addDays(date, dayOffset + ziOffset);
   assertYear(shifted.year);
-  return { ...shifted, hourBranch, gender };
+  return calendarConvention === 'vietnamese'
+    ? { ...shifted, hourBranch, gender, calendarConvention: 'vietnamese' }
+    : { ...shifted, hourBranch, gender };
 }
 
 function timeCorrection(date: CivilDate, hour: number, minute: number, input: BirthInput, profile: Profile, candidate: TimeZoneCandidate): { seconds: number; longitudeMinutes: number; eotMinutes: number } {
@@ -104,15 +106,19 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
   const comparison = compareCalendars(date);
   audit.push({ step: 'calendar-comparison', description: 'Compared upstream Chinese lunar date with an astronomical fixed-UTC+7 model.', data: { ...comparison } });
   if (comparison.different) {
-    if (input.calendarConvention !== 'chinese') {
-      warnings.push('CALENDAR_DIVERGENCE_NO_ADAPTER');
+    if (!input.calendarConvention) {
+      warnings.push('CALENDAR_DIVERGENCE_CHOICE_REQUIRED');
       return needs('CALENDAR_DIVERGENCE');
     }
-    warnings.push('CALENDAR_DIVERGENCE_CHINESE_EXPLICIT');
+    if (input.calendarConvention === 'chinese') {
+      warnings.push('CALENDAR_DIVERGENCE_CHINESE_EXPLICIT');
+    } else {
+      warnings.push('CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER');
+    }
   }
   if (input.calendarConvention === 'vietnamese') warnings.push('VIETNAMESE_CALENDAR_MODEL');
   function selectableScenario(chart: ChartReady): boolean {
-    if (input.calendarConvention === 'chinese' || formatDate(chart) === formatDate(date)) return true;
+    if (input.calendarConvention === 'chinese' || input.calendarConvention === 'vietnamese' || formatDate(chart) === formatDate(date)) return true;
     const checked = compareCalendars(chart);
     if (!checked.different) return true;
     const warning = `SCENARIO_BLOCKED_DIVERGENCE:${formatDate(chart)}`;
@@ -138,7 +144,7 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
   if (zone.status === 'ambiguous') {
     const allOptions = zone.candidates.map(candidate => ({
       ...candidate,
-      chart: chartAt(date, timeCorrection(date, hour, minute, input, profile, candidate).seconds, input.gender, profile),
+      chart: chartAt(date, timeCorrection(date, hour, minute, input, profile, candidate).seconds, input.gender, profile, input.calendarConvention),
     }));
     const { selectable: scenarioOptions, blocked } = partitionScenarios(allOptions, option => option.chart);
     if (blocked.length > 0) {
@@ -156,8 +162,8 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
   }
   const candidate = zone.candidates[0];
   const correction = timeCorrection(date, hour, minute, input, profile, candidate);
-  const chart = chartAt(date, correction.seconds, input.gender, profile);
-  const uncorrectedChart = chartAt(date, hour * 3600 + minute * 60, input.gender, profile);
+  const chart = chartAt(date, correction.seconds, input.gender, profile, input.calendarConvention);
+  const uncorrectedChart = chartAt(date, hour * 3600 + minute * 60, input.gender, profile, input.calendarConvention);
   audit.push({
     step: 'solar-time', description: 'Applied only the profile-selected correction; seconds are rounded once before branch/day selection.',
     data: { mode: profile.solarTime, longitudeMinutes: correction.longitudeMinutes, equationOfTimeMinutes: correction.eotMinutes, totalCorrectionMinutes: correction.longitudeMinutes + correction.eotMinutes, correctedClockDayOffset: Math.floor(correction.seconds / DAY_SECONDS) },
@@ -167,9 +173,12 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
   if (formatDate(chart) !== formatDate(date)) {
     const shiftedComparison = compareCalendars(chart);
     audit.push({ step: 'shifted-calendar-comparison', description: 'Checked the engine date after solar-time/late-Zi day movement.', data: { ...shiftedComparison } });
-    if (shiftedComparison.different && input.calendarConvention !== 'chinese') {
+    if (shiftedComparison.different && !input.calendarConvention) {
       warnings.push('SHIFTED_DATE_DIVERGENCE');
       return needs('CALENDAR_DIVERGENCE');
+    }
+    if (shiftedComparison.different && input.calendarConvention === 'vietnamese' && !warnings.includes('CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER')) {
+      warnings.push('CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER');
     }
   }
 
@@ -180,7 +189,10 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
   const nearBoundary = boundaryMinutes > 0 && Math.min(branchDistance, midnightDistance) <= boundaryMinutes * 60;
   if (nearBoundary) {
     const radius = boundaryMinutes * 60 + 1;
-    scenarios.push(chartAt(date, correction.seconds - radius, input.gender, profile), chartAt(date, correction.seconds + radius, input.gender, profile));
+    scenarios.push(
+      chartAt(date, correction.seconds - radius, input.gender, profile, input.calendarConvention),
+      chartAt(date, correction.seconds + radius, input.gender, profile, input.calendarConvention),
+    );
   }
   const correctionChangesChart = profile.solarTime !== 'none' && key(uncorrectedChart) !== key(chart);
   if (correctionChangesChart) scenarios.push(uncorrectedChart);

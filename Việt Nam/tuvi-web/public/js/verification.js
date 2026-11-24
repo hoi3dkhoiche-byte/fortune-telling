@@ -1,6 +1,8 @@
 const warningLabels = {
+  CALENDAR_DIVERGENCE_CHOICE_REQUIRED: 'Lịch Việt (UTC+7) và lịch Trung Quốc khác nhau ở ngày này. Hãy chọn rõ quy ước lịch Việt hoặc lịch Trung để lập số.',
   CALENDAR_DIVERGENCE_NO_ADAPTER: 'Engine dùng lịch Trung Quốc. Lập số theo lịch Việt ngày này cần adapter riêng; không tạo lá số sai.',
   CALENDAR_DIVERGENCE_CHINESE_EXPLICIT: 'Lịch Trung và lịch Việt khác nhau ngày này. Đang dùng quy ước lịch Trung theo lựa chọn của bạn.',
+  CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER: 'Lịch Việt (UTC+7) và lịch Trung khác nhau ngày này. Đang dùng adapter lịch Việt để an sao theo ngày âm lịch Việt Nam.',
   VIETNAMESE_CALENDAR_MODEL: 'Kiểm tra lịch Việt dùng mô hình thiên văn UTC+7, không phải mọi lịch chính thức.',
   SHIFTED_DATE_DIVERGENCE: 'Ngày lập số sau hiệu chỉnh rơi vào ngày lịch Trung/Việt khác nhau.',
 };
@@ -96,12 +98,12 @@ export function getBlockedScenarioGuidance(result, calendarConvention) {
   if (!hasBlocked) return null;
   if (calendarConvention === 'vietnamese') {
     return {
-      message: 'Đang chọn quy ước Lịch Việt Nam nên phương án rơi vào ngày lệch lịch không thể mở được (cần adapter lịch Việt riêng).',
+      message: 'Đang chọn quy ước Lịch Việt Nam nhưng phương án này vẫn bị chặn ở bản ghi kiểm chứng cũ.',
       canOpenChineseConvention: false,
     };
   }
   return {
-    message: 'Để mở phương án bị chặn, hãy vào Tùy chọn nâng cao và chọn Quy ước Lịch Trung Quốc (chinese).',
+    message: 'Để mở phương án bị chặn, hãy vào Tùy chọn nâng cao và chọn Quy ước Lịch Việt Nam (vietnamese) hoặc Lịch Trung Quốc (chinese).',
     canOpenChineseConvention: true,
   };
 }

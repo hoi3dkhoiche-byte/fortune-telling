@@ -135,7 +135,8 @@ function matchScenario(candidate, scenario) {
     candidate.month === scenario.month &&
     candidate.day === scenario.day &&
     candidate.hourBranch === scenario.hourBranch &&
-    candidate.gender === scenario.gender
+    candidate.gender === scenario.gender &&
+    candidate.calendarConvention === scenario.calendarConvention
   );
 }
 

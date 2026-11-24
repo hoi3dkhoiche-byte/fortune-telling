@@ -368,3 +368,29 @@ test('API cùng origin không quảng bá quyền truy cập CORS', async () => 
   assert.equal(res.headers.get('access-control-allow-origin'), null);
 });
 
+test('POST /api/natal hỗ trợ adapter lịch Việt trên ngày lệch lịch 1968-01-29', async () => {
+  const baseBirth = {
+    calendar: 'solar',
+    date: '1968-01-29',
+    time: '12:30',
+    tz: 'Asia/Ho_Chi_Minh',
+    gender: 'male',
+  };
+  const unresolved = await postNatal({ birth: baseBirth, profileId: 'thienky-candidate' });
+  assert.equal(unresolved.status, 422);
+  assert.equal(unresolved.json.reason, 'CALENDAR_DIVERGENCE');
+  assert.deepEqual(unresolved.json.warnings, ['CALENDAR_DIVERGENCE_CHOICE_REQUIRED']);
+
+  const vn = await postNatal({
+    birth: { ...baseBirth, calendarConvention: 'vietnamese' },
+    profileId: 'thienky-candidate',
+  });
+  assert.equal(vn.status, 200);
+  assert.equal(vn.json.provenance.calendar, 'vietnamese-astronomical-utc+7');
+  assert.equal(vn.json.natal.lunarInfo.lunarYear, 1968);
+  assert.equal(vn.json.natal.lunarInfo.lunarMonth, 1);
+  assert.equal(vn.json.natal.lunarInfo.lunarDay, 1);
+  assert.equal(vn.json.natal.mingGongBranch, 8);
+  assert.ok(vn.json.normalization.warnings.includes('CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER'));
+});
+

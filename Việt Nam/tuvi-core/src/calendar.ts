@@ -139,6 +139,14 @@ export function solarToVietnamese(date: CivilDate): LunarDate {
   throw new Error('Date not covered by astronomical calendar cycles.');
 }
 
+export function vietnameseMonthDayCount(year: number, month: number, isLeap: boolean): number {
+  assertYear(year);
+  if (!Number.isInteger(month) || month < 1 || month > 12 || typeof isLeap !== 'boolean') return 0;
+  const match = [...solsticeCycle(year - 1), ...solsticeCycle(year)]
+    .find(m => m.year === year && m.month === month && m.isLeap === isLeap);
+  return match ? match.endDay - match.startDay : 0;
+}
+
 export function vietnameseToSolar(date: LunarDate): CivilDate {
   assertYear(date.year);
   if (!Number.isInteger(date.month) || date.month < 1 || date.month > 12 || !Number.isInteger(date.day) || date.day < 1 || date.day > 30 || typeof date.isLeap !== 'boolean') {
