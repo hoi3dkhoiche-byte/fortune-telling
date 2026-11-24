@@ -36,7 +36,8 @@ test('màn dữ kiện dùng các fact thật của core và giữ đúng sao m�
 test('file JSON mẫu hiển thị dữ kiện dù chưa có displayNatal', async () => {
   const { buildFactSummary } = await import('../public/js/reading.js');
   const result = JSON.parse(readFileSync(path.resolve(__dirname, '../../tuvi-core/examples/birth.output.json'), 'utf8'));
-  const rows = buildFactSummary(result).flatMap(group => group.rows);
+  const groups = buildFactSummary(result);
+  const rows = groups.flatMap(group => group.rows);
   assert.ok(rows.some(row => /^Thiên Lương tọa thủ Mệnh/.test(row.text)));
   assert.ok(rows.some(row => /Hóa Kỵ tại/.test(row.text)));
 });

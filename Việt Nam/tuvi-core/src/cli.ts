@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createReadStream, existsSync, realpathSync, statSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { open, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { resolve } from 'node:path';
 import { computeNatal } from './natal';
@@ -103,10 +103,10 @@ async function main() {
     return;
   }
 
-  // Streaming reads and writes keep memory bounded for training-data generation.
+  // Open the output first so readline cannot emit input while awaiting the file.
+  const output = flags.output ? await open(flags.output, 'w') : undefined;
   const source = flags.input === '-' ? process.stdin : createReadStream(flags.input, { encoding: 'utf8' });
   const lines = createInterface({ input: source, crlfDelay: Infinity });
-  const output = flags.output ? await import('node:fs/promises').then(fs => fs.open(flags.output!, 'w')) : undefined;
   let lineNumber = 0;
   let hasErrors = false;
   let hasNeeds = false;

@@ -72,6 +72,38 @@ test('validateImportedChart từ chối JSON nông/hỏng và chấp nhận file
   assert.equal(validated.importedFromFile, true);
   assert.equal(validated.schemaVersion, valid.schemaVersion);
   assert.equal(validated.natal.palaces.length, 12);
+
+  const legacy = JSON.parse(readFileSync(path.resolve(__dirname, '../public/sample-data.json'), 'utf8'));
+  assert.equal(legacy.schemaVersion, undefined);
+  assert.equal(validateImportedChart(legacy).importedFromFile, true);
+});
+
+test('validateImportedChart chặn dữ liệu lồng sai trước khi chuyển vào màn lá số', async () => {
+  const { validateImportedChart } = await import('../public/js/verification.js');
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../tuvi-core/examples/birth.output.json'), 'utf8'));
+  const cases = [
+    [data => { data.natal.palaces[0].stars[0] = null; }, /dữ liệu sao/i],
+    [data => { data.natal.palaces[0].borrowedStars = {}; }, /dữ liệu sao/i],
+    [data => { data.labels = 'invalid'; }, /nhãn cung/i],
+    [data => { data.labels = []; }, /nhãn cung/i],
+    [data => { data.labels.palaces[0] = null; }, /nhãn cung/i],
+    [data => { data.labels.palaces[0].stars[0].brightness.labelVi = 123; }, /nhãn cung/i],
+    [data => { data.relations[0].opposite = null; }, /quan hệ cung/i],
+    [data => { data.relations[0].trine[0] = null; }, /quan hệ cung/i],
+    [data => { data.facts[0] = null; }, /danh sách dữ kiện/i],
+    [data => { data.normalization.audit = {}; }, /thông tin kiểm chứng/i],
+    [data => { data.normalization.audit[0] = null; }, /thông tin kiểm chứng/i],
+    [data => { data.normalization.warnings = { length: 1 }; }, /thông tin kiểm chứng/i],
+    [data => {
+      data.displayNatal = structuredClone(data.natal);
+      data.natal.palaces[0].stars[0] = null;
+    }, /dữ liệu sao/i],
+  ];
+  for (const [mutate, message] of cases) {
+    const data = structuredClone(fixture);
+    mutate(data);
+    assert.throws(() => validateImportedChart(data), message);
+  }
 });
 
 test('getBlockedScenarioGuidance chỉ dẫn mở lịch Trung hoặc báo rõ giới hạn lịch Việt', async () => {

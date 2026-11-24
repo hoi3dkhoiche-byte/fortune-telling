@@ -17,39 +17,73 @@ export function translateWarning(warning) {
   return warning;
 }
 
-export function validateImportedChart(data) {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    throw new Error('File không chứa đối tượng JSON hợp lệ.');
-  }
-  if (typeof data.schemaVersion !== 'string' || !data.schemaVersion.trim()) {
-    throw new Error('Thiếu trường schemaVersion trong dữ liệu lá số.');
-  }
-  const natal = data.displayNatal ?? data.natal;
-  if (!natal || typeof natal !== 'object' || Array.isArray(natal)) {
-    throw new Error('File không chứa dữ liệu lá số (thiếu natal hoặc displayNatal).');
-  }
-  if (!Array.isArray(natal.palaces) || natal.palaces.length !== 12) {
+const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const isBranch = value => Number.isInteger(value) && value >= 0 && value <= 11;
+const isString = value => typeof value === 'string';
+const isOptionalString = value => value == null || isString(value);
+const isListOf = (value, check) => Array.isArray(value) && value.every(check);
+const isOptionalListOf = (value, check) => value == null || isListOf(value, check);
+
+function validateNatal(natal) {
+  if (!isRecord(natal) || !Array.isArray(natal.palaces) || natal.palaces.length !== 12) {
     throw new Error('Dữ liệu lá số phải có đủ 12 cung.');
   }
   const branches = new Set();
   for (const palace of natal.palaces) {
-    if (
-      !palace || typeof palace !== 'object'
-      || !Number.isInteger(palace.branch) || palace.branch < 0 || palace.branch > 11
-      || !Array.isArray(palace.stars)
-    ) {
+    if (!isRecord(palace) || !isBranch(palace.branch) || !Array.isArray(palace.stars)) {
       throw new Error('Cấu trúc cung hoặc danh sách sao trong file không hợp lệ.');
+    }
+    if (!palace.stars.every(star => isRecord(star) && isString(star.name)
+      && isOptionalString(star.brightnessRaw) && isOptionalString(star.brightnessLabelVi))
+      || !isOptionalListOf(palace.borrowedStars, isString)) {
+      throw new Error('Dữ liệu sao trong file không hợp lệ.');
     }
     branches.add(palace.branch);
   }
   if (branches.size !== 12) {
     throw new Error('12 cung trong lá số phải có đủ 12 địa chi riêng biệt (0–11).');
   }
-  if (!Number.isInteger(natal.mingGongBranch) || natal.mingGongBranch < 0 || natal.mingGongBranch > 11) {
+  if (!isBranch(natal.mingGongBranch)) {
     throw new Error('Thiếu vị trí cung Mệnh hợp lệ (mingGongBranch).');
   }
-  if (!Number.isInteger(natal.shenGongBranch) || natal.shenGongBranch < 0 || natal.shenGongBranch > 11) {
+  if (!isBranch(natal.shenGongBranch)) {
     throw new Error('Thiếu vị trí cung Thân hợp lệ (shenGongBranch).');
+  }
+}
+
+export function validateImportedChart(data) {
+  if (!isRecord(data)) {
+    throw new Error('File không chứa đối tượng JSON hợp lệ.');
+  }
+  if (data.schemaVersion !== undefined && (!isString(data.schemaVersion) || !data.schemaVersion.trim())) {
+    throw new Error('Trường schemaVersion trong file không hợp lệ.');
+  }
+  if (data.natal == null && data.displayNatal == null) {
+    throw new Error('File không chứa dữ liệu lá số (thiếu natal hoặc displayNatal).');
+  }
+  // Bản hiển thị và bản gốc đều có thể được dùng khi tra dữ kiện.
+  if (data.natal != null) validateNatal(data.natal);
+  if (data.displayNatal != null) validateNatal(data.displayNatal);
+
+  const isRelationRef = item => isRecord(item) && isBranch(item.branch);
+  if (!isOptionalListOf(data.relations, item =>
+    isRelationRef(item) && isRelationRef(item.opposite) && isListOf(item.trine, isRelationRef))) {
+    throw new Error('Dữ liệu quan hệ cung trong file không hợp lệ.');
+  }
+  if (!isOptionalListOf(data.facts, item => isRecord(item) && isString(item.predicate) && isString(item.id))) {
+    throw new Error('Danh sách dữ kiện lá số trong file không hợp lệ.');
+  }
+  if ((data.labels != null && !isRecord(data.labels))
+    || !isOptionalListOf(data.labels?.palaces, palace =>
+      isRecord(palace) && isOptionalListOf(palace.stars, star =>
+        isRecord(star) && isOptionalString(star.brightness?.labelVi)))) {
+    throw new Error('Nhãn cung hoặc sao trong file không hợp lệ.');
+  }
+  const normalized = data.normalization ?? data;
+  if (!isRecord(normalized)
+    || !isOptionalListOf(normalized.audit, entry => isRecord(entry) && isString(entry.step))
+    || !isOptionalListOf(normalized.warnings, isString)) {
+    throw new Error('Thông tin kiểm chứng trong file không hợp lệ.');
   }
   return { ...data, importedFromFile: true };
 }
