@@ -84,13 +84,13 @@ fortune-telling/
 │   │   │   ├── calendar-diff.ts                        <-- Script kiểm thử sai lệch lịch thiên văn 1950-2026
 │   │   │   └── verify-vendor.cjs                       <-- Kiểm tra tính toàn vẹn mã nguồn vendor
 │   │   ├── examples/                                   <-- Các file mẫu đầu vào (birth.json, batch.jsonl...)
-│   │   ├── tests/                                      <-- Bộ test tự động 43/43 tests (natal, facts, normalize...)
+│   │   ├── tests/                                      <-- Bộ test tự động 44/44 tests (natal, facts, normalize...)
 │   │   └── vendor/                                     <-- Mã nguồn thuật toán gốc và bảng an sao
 │   │
 │   ├── tuvi-web/                                       <-- FRONTEND & ADAPTER: Giao diện web Tử Vi Vũ Trụ
 │   │   ├── server.js                                   <-- Máy chủ Node.js REST API & static server bảo mật
 │   │   ├── package.json                                <-- Quản lý phụ thuộc và scripts chạy web/test
-│   │   ├── tests/                                      <-- Bộ test tích hợp và kiểm thử giao diện 26/26 tests
+│   │   ├── tests/                                      <-- Bộ test tích hợp và kiểm thử giao diện 31/31 tests
 │   │   └── public/                                     <-- Giao diện 3 màn hình SPA (Cosmic Portal, Bàn cờ 4x4, Dữ kiện)
 │   │       ├── index.html                              <-- Khung HTML chính, hỗ trợ nhập ngày giờ, mở file JSON
 │   │       ├── css/styles.css                          <-- Hệ thống style Cosmic Theme, Glassmorphism, Responsive
@@ -151,23 +151,26 @@ node dist/src/cli.js batch --input examples/batch.jsonl --output results.jsonl -
 
 ### Sử dụng làm thư viện trong mã nguồn TypeScript / Node.js:
 ```typescript
-import { computeNatal, buildFacts, decorateNatal } from './src';
+import { computeNatal, decorateNatal, getProfile } from './src';
 
-// 1. Tính toán lá số bản mệnh tất định
-const natal = computeNatal({
-  year: 1990,
-  month: 8,
-  day: 15,
-  hourIndex: 6, // Giờ Ngọ (11:00 - 13:00)
-  gender: 'male'
-}, 'thienky-candidate');
+// 1. Tính toán lá số bản mệnh tất định (kèm facts, labels, relations, hash)
+const result = computeNatal(
+  {
+    year: 1990,
+    month: 8,
+    day: 15,
+    hourBranch: 6, // Chi giờ Ngọ (0 = Tý .. 11 = Hợi)
+    gender: 'male',
+  },
+  getProfile('thienky-candidate'),
+);
 
-// 2. Trích xuất sự thật cấu trúc (Facts) phục vụ LLM Validator
-const facts = buildFacts(natal);
+// 2. Sự thật cấu trúc (Facts) phục vụ LLM Validator
+const { facts } = result;
 
-// 3. Bản địa hóa Hán - Việt
-const localizedChart = decorateNatal(natal, 'vi');
-console.log(JSON.stringify(localizedChart, null, 2));
+// 3. Bản địa hóa Hán - Việt để hiển thị
+const localizedChart = decorateNatal(result.natal);
+console.log(JSON.stringify({ factsCount: facts.length, localizedChart }, null, 2));
 ```
 
 ### Khởi chạy Giao diện Trực quan (`tuvi-web`):
@@ -175,7 +178,7 @@ Giao diện web phong cách Vũ Trụ Sâu Thẳm (Cosmic Deep Space), tích h�
 ```bash
 cd "Việt Nam/tuvi-web"
 
-# 1. Chạy bài kiểm thử giao diện & API (26/26 tests passed)
+# 1. Chạy bài kiểm thử giao diện & API (31/31 tests passed)
 npm test
 
 # 2. Khởi chạy máy chủ web local
