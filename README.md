@@ -84,13 +84,13 @@ fortune-telling/
 │   │   │   ├── calendar-diff.ts                        <-- Script kiểm thử sai lệch lịch thiên văn 1950-2026
 │   │   │   └── verify-vendor.cjs                       <-- Kiểm tra tính toàn vẹn mã nguồn vendor
 │   │   ├── examples/                                   <-- Các file mẫu đầu vào (birth.json, batch.jsonl...)
-│   │   ├── tests/                                      <-- Bộ test tự động 44/44 tests (natal, facts, normalize...)
+│   │   ├── tests/                                      <-- Bộ test tự động 49/49 tests (natal, facts, normalize, vietnamese-adapter...)
 │   │   └── vendor/                                     <-- Mã nguồn thuật toán gốc và bảng an sao
 │   │
 │   ├── tuvi-web/                                       <-- FRONTEND & ADAPTER: Giao diện web Tử Vi Vũ Trụ
 │   │   ├── server.js                                   <-- Máy chủ Node.js REST API & static server bảo mật
 │   │   ├── package.json                                <-- Quản lý phụ thuộc và scripts chạy web/test
-│   │   ├── tests/                                      <-- Bộ test tích hợp và kiểm thử giao diện 31/31 tests
+│   │   ├── tests/                                      <-- Bộ test tích hợp và kiểm thử giao diện 32/32 tests
 │   │   └── public/                                     <-- Giao diện 3 màn hình SPA (Cosmic Portal, Bàn cờ 4x4, Dữ kiện)
 │   │       ├── index.html                              <-- Khung HTML chính, hỗ trợ nhập ngày giờ, mở file JSON
 │   │       ├── css/styles.css                          <-- Hệ thống style Cosmic Theme, Glassmorphism, Responsive
@@ -178,7 +178,7 @@ Giao diện web phong cách Vũ Trụ Sâu Thẳm (Cosmic Deep Space), tích h�
 ```bash
 cd "Việt Nam/tuvi-web"
 
-# 1. Chạy bài kiểm thử giao diện & API (31/31 tests passed)
+# 1. Chạy bài kiểm thử giao diện & API (32/32 tests passed)
 npm test
 
 # 2. Khởi chạy máy chủ web local
