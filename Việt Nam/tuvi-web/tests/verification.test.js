@@ -83,6 +83,7 @@ test('validateImportedChart từ chối JSON nông/hỏng và chấp nhận file
 test('validateImportedChart chặn dữ liệu lồng sai trước khi chuyển vào màn lá số', async () => {
   const { validateImportedChart } = await import('../public/js/verification.js');
   const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../tuvi-core/examples/birth.output.json'), 'utf8'));
+  /** @type {Array<[(data: any) => void, RegExp]>} */
   const cases = [
     [data => { data.natal.palaces[0].stars[0] = null; }, /dữ liệu sao/i],
     [data => { data.natal.palaces[0].borrowedStars = {}; }, /dữ liệu sao/i],
@@ -118,12 +119,14 @@ test('getBlockedScenarioGuidance chỉ dẫn mở lịch Trung hoặc báo rõ g
   assert.equal(getBlockedScenarioGuidance({ audit: [], warnings: [] }, undefined), null);
 
   const defaultGuidance = getBlockedScenarioGuidance(blockedResult, undefined);
+  assert.ok(defaultGuidance);
   assert.equal(defaultGuidance.canOpenChineseConvention, true);
   assert.match(defaultGuidance.message, /Tùy chọn nâng cao/);
   assert.match(defaultGuidance.message, /Lịch Việt Nam/);
   assert.match(defaultGuidance.message, /Lịch Trung Quốc/);
 
   const vnGuidance = getBlockedScenarioGuidance(blockedResult, 'vietnamese');
+  assert.ok(vnGuidance);
   assert.equal(vnGuidance.canOpenChineseConvention, false);
   assert.match(vnGuidance.message, /Lịch Việt Nam/);
 });
@@ -131,21 +134,21 @@ test('getBlockedScenarioGuidance chỉ dẫn mở lịch Trung hoặc báo rõ g
 test('buildVerification gắn nhãn chưa kiểm tra lại cho file mở lên và dịch bước blocked-scenarios', async () => {
   const { buildVerification, validateImportedChart } = await import('../public/js/verification.js');
   const prevDoc = globalThis.document;
-  globalThis.document = createMockDocument();
+  globalThis.document = /** @type {any} */ (createMockDocument());
   try {
     const valid = JSON.parse(readFileSync(path.resolve(__dirname, '../../tuvi-core/examples/birth.output.json'), 'utf8'));
     const imported = validateImportedChart(valid);
-    const importedEl = buildVerification(imported);
+    const importedEl = /** @type {any} */ (buildVerification(imported));
     const importedText = importedEl.collectText();
     assert.match(importedText, /Mở từ file · Chưa kiểm tra lại/);
     assert.match(importedText, /chưa kiểm tra lại bằng máy chủ/);
     assert.match(importedText, /Mã kiểm tra lá số \(trong file · chưa kiểm tra lại\)/);
     assert.match(importedText, /Nguồn và phiên bản \(trong file · chưa kiểm tra lại\)/);
 
-    const engineEl = buildVerification({
+    const engineEl = /** @type {any} */ (buildVerification({
       warnings: ['SCENARIO_BLOCKED_DIVERGENCE:1968-01-29'],
       audit: [{ step: 'blocked-scenarios', data: { blocked: [{ year: 1968, month: 1, day: 29, hourBranch: 0, gender: 'male' }] } }],
-    });
+    }));
     const engineText = engineEl.collectText();
     assert.doesNotMatch(engineText, /chưa kiểm tra lại/);
     assert.match(engineText, /Phương án ngày 29\/01\/1968 bị chặn/);

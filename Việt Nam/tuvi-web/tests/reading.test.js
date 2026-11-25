@@ -7,10 +7,13 @@ const { computeNatal, getProfile, normalizeBirth } = require('../../tuvi-core');
 test('màn dữ kiện dùng các fact thật của core và giữ đúng sao mượn', async () => {
   const { buildFactSummary } = await import('../public/js/reading.js');
   const profile = getProfile('thienky-candidate');
+  /** @type {import('../../tuvi-core').BirthInput} */
   const birth = { calendar: 'solar', date: '1990-01-06', time: '06:00', tz: 'Asia/Ho_Chi_Minh', gender: 'male' };
   const normalized = normalizeBirth(birth, profile);
   assert.equal(normalized.status, 'ok');
+  if (normalized.status !== 'ok') throw new Error('expected ok');
   const result = computeNatal(normalized.chart, profile);
+  if (!('facts' in result)) throw new Error('expected facts');
   const groups = buildFactSummary(result);
   const rows = groups.flatMap(group => group.rows);
   assert.ok(rows.some(row => row.text === 'Mệnh vô chính diệu'));

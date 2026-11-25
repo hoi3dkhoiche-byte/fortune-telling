@@ -140,14 +140,16 @@ export function partitionStars(stars) {
 }
 
 export function setupChart() {
-  const boardContainer = document.getElementById('board-container');
-  const chartGrid = document.getElementById('chart-grid');
-  const svgOverlay = document.getElementById('relations-svg');
-  const centerCell = document.getElementById('center-cell');
-  const mobileCardList = document.getElementById('mobile-card-list');
+  const mustEl = id => /** @type {HTMLElement} */ (document.getElementById(id));
+  const boardContainer = mustEl('board-container');
+  const chartGrid = mustEl('chart-grid');
+  const svgOverlay = /** @type {SVGSVGElement} */ (/** @type {unknown} */ (document.getElementById('relations-svg')));
+  const centerCell = mustEl('center-cell');
+  const mobileCardList = mustEl('mobile-card-list');
 
   // Gắn sự kiện click cho 12 ô cung
   chartGrid.querySelectorAll('.palace-cell').forEach(cell => {
+    if (!(cell instanceof HTMLElement)) return;
     const branch = Number(cell.dataset.branch);
     cell.addEventListener('click', () => {
       state.selectPalace(branch);
@@ -164,11 +166,18 @@ export function setupChart() {
     renderChart(s);
   });
 
-  window.addEventListener('resize', () => {
+  const redrawIfVisible = () => {
     const s = state.getState();
-    if (s.currentNatal && s.showRelationLines) {
+    if (s.currentNatal && s.showRelationLines && s.selectedBranch !== null) {
       drawRelationLines(s);
     }
+  };
+
+  window.addEventListener('resize', redrawIfVisible);
+  window.matchMedia?.('(prefers-color-scheme: dark)')?.addEventListener?.('change', redrawIfVisible);
+  new MutationObserver(redrawIfVisible).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
   });
 
   function renderChart(s) {
@@ -221,14 +230,12 @@ export function setupChart() {
 
   function renderEmptyState() {
     centerCell.innerHTML = `
-      <div class="cosmic-mandala-container">
+      <div class="center-content-wrap">
         <div class="cosmic-mandala-ring"></div>
-        <div style="position: relative; z-index: 2; text-align: center; padding: 20px;">
-          <div style="font-family: var(--font-serif); font-size: 1.5rem; color: #F59E0B; margin-bottom: 8px; font-weight: 700; text-shadow: 0 0 12px rgba(245, 158, 11, 0.5);">
-            THIÊN KỶ
-          </div>
-          <p style="font-size: 0.85rem; color: #94A3B8; max-width: 240px; line-height: 1.4; margin: 0 auto;">
-            Khởi tạo dữ kiện hoặc chọn lá số mẫu để khám phá Mệnh Bàn.
+        <div style="position: relative; z-index: 2; padding: 16px;">
+          <div class="center-brand-title">Thiên Kỷ</div>
+          <p class="center-empty-desc">
+            Khởi tạo dữ kiện hoặc chọn lá số mẫu để khám phá mệnh bàn.
           </p>
         </div>
       </div>
@@ -237,6 +244,7 @@ export function setupChart() {
     mobileCardList.replaceChildren();
 
     chartGrid.querySelectorAll('.palace-cell').forEach(cell => {
+      if (!(cell instanceof HTMLElement)) return;
       const b = Number(cell.dataset.branch);
       cell.classList.remove('active', 'rel-opposite', 'rel-trine');
       cell.innerHTML = `
@@ -244,8 +252,8 @@ export function setupChart() {
           <div class="cell-palace-name">Cung ${BRANCH_NAMES[b]}</div>
           <div class="cell-can-chi">Chi ${b}</div>
         </div>
-        <div class="cell-columns-container" style="justify-content: center; align-items: center; opacity: 0.3;">
-          <span style="font-size: 0.75rem; color: #64748B;">Chờ dữ kiện...</span>
+        <div class="cell-columns-container cell-waiting">
+          <span>Chờ dữ kiện…</span>
         </div>
         <div class="cell-bottom">
           <span>—</span>
@@ -296,7 +304,7 @@ export function setupChart() {
 
           ${isEmpty && borrowedStars.length > 0 ? `
             <div class="borrowed-stars-box">
-              <span style="font-size: 0.65rem; color: #94A3B8;">Mượn:</span>
+              <span>Mượn:</span>
               ${borrowedStars.map(name => `<span class="borrowed-star">${escapeHtml(name)}</span>`).join('')}
             </div>
           ` : ''}
@@ -310,7 +318,7 @@ export function setupChart() {
       <!-- Footer Cung: Đại Hạn & Vị trí -->
       <div class="cell-bottom">
         <span class="daxian-badge">ĐH: ${escapeHtml(daXianRange)}</span>
-        <span style="font-size: 0.65rem; color: #64748B;">${escapeHtml(palace.branchLabelVi || palace.branch)}</span>
+        <span>${escapeHtml(palace.branchLabelVi || palace.branch)}</span>
       </div>
     `;
   }
@@ -360,14 +368,18 @@ export function setupChart() {
       <div class="center-content-wrap">
         <div class="cosmic-mandala-ring"></div>
 
-        <div style="position: relative; z-index: 3;">
-          <div class="center-brand-title">THIÊN KỶ</div>
-          <div style="font-size: 0.9rem; font-weight: 700; color: #F8FAFC; margin-bottom: 2px;">
-            ${escapeHtml(userName || 'Đương Số')}${birthInfo.gender === 'female' ? ' • Nữ Mệnh' : birthInfo.gender === 'male' ? ' • Nam Mệnh' : ''}
+        <div style="position: relative; z-index: 3; width: 100%;">
+          <div class="center-brand-title">Thiên Kỷ</div>
+          <div class="center-user-line">
+            ${escapeHtml(userName || 'Đương số')}${birthInfo.gender === 'female' ? ' · Nữ mệnh' : birthInfo.gender === 'male' ? ' · Nam mệnh' : ''}
           </div>
 
-          ${isSample ? `<div style="margin: 2px 0;"><span class="badge-tag sample">LÁ SỐ MẪU MINH HỌA</span></div>` : ''}
-          ${isImported ? `<div style="margin: 2px 0;"><span class="badge-tag candidate">MỞ TỪ FILE · CHƯA KIỂM TRA LẠI</span></div>` : ''}
+          ${isSample || isImported ? `
+            <div class="center-badge-row">
+              ${isSample ? '<span class="badge-tag sample">Lá số mẫu minh họa</span>' : ''}
+              ${isImported ? '<span class="badge-tag candidate">Mở từ file · Chưa kiểm tra lại</span>' : ''}
+            </div>
+          ` : ''}
 
           <div class="center-meta-grid">
             ${dateRows.map(([label, value]) => `
@@ -377,15 +389,15 @@ export function setupChart() {
               </div>
             `).join('')}
             <div class="meta-item">
-              <span class="meta-label">Cục (Ngũ Hành):</span>
-              <span class="meta-val" style="color: #F59E0B;">${escapeHtml(natal.wuxingJuLabelVi || natal.wuxingJuName || '—')}</span>
+              <span class="meta-label">Cục ngũ hành</span>
+              <span class="meta-val meta-val-accent">${escapeHtml(natal.wuxingJuLabelVi || natal.wuxingJuName || '—')}</span>
             </div>
             <div class="meta-item">
-              <span class="meta-label">Mệnh Chủ:</span>
+              <span class="meta-label">Mệnh chủ</span>
               <span class="meta-val">${escapeHtml(natal.mingZhuLabelVi || natal.mingZhu || '—')}</span>
             </div>
             <div class="meta-item">
-              <span class="meta-label">Thân Chủ:</span>
+              <span class="meta-label">Thân chủ</span>
               <span class="meta-val">${escapeHtml(natal.shenZhuLabelVi || natal.shenZhu || '—')}</span>
             </div>
           </div>
@@ -398,7 +410,7 @@ export function setupChart() {
             <span class="sihua-badge sh-ke">Khoa</span>
             <span class="sihua-badge sh-ji">Kỵ</span>
           </div>
-          <div style="font-size: 0.7rem; color: #94A3B8; margin-top: 4px;">
+          <div class="center-footnote">
             Cột phải gồm sát/hung tinh, Hóa Kỵ và sao có độ sáng thấp
           </div>
         </div>
@@ -422,24 +434,29 @@ export function setupChart() {
 
     const activeCenter = getCellCenter(activeCell, svgRect);
 
-    // 1. Đường đối cung: Nét đứt thanh mảnh 1px, độ mờ dịu nhẹ, không glow che chữ
+    const styles = getComputedStyle(document.documentElement);
+    const oppStroke = styles.getPropertyValue('--rel-opposite-stroke').trim() || 'rgba(215, 0, 21, 0.42)';
+    const trineStroke = styles.getPropertyValue('--rel-trine-stroke').trim() || 'rgba(0, 113, 227, 0.36)';
+    const trineFill = styles.getPropertyValue('--rel-trine-fill').trim() || 'rgba(0, 113, 227, 0.03)';
+
+    // 1. Đường đối cung: Nét đứt thanh mảnh 1px thích ứng Sáng/Tối
     if (relations.opposite) {
       const oppCell = getPalaceCell(relations.opposite.branch);
       if (oppCell) {
         const oppCenter = getCellCenter(oppCell, svgRect);
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', activeCenter.x);
-        line.setAttribute('y1', activeCenter.y);
-        line.setAttribute('x2', oppCenter.x);
-        line.setAttribute('y2', oppCenter.y);
-        line.setAttribute('stroke', 'rgba(239, 68, 68, 0.45)');
+        line.setAttribute('x1', String(activeCenter.x));
+        line.setAttribute('y1', String(activeCenter.y));
+        line.setAttribute('x2', String(oppCenter.x));
+        line.setAttribute('y2', String(oppCenter.y));
+        line.setAttribute('stroke', oppStroke);
         line.setAttribute('stroke-width', '1');
         line.setAttribute('stroke-dasharray', '4,4');
         svgOverlay.appendChild(line);
       }
     }
 
-    // 2. Tam giác tam hợp: Nét mảnh 1px thanh thoát, độ trong suốt cao, không chèn ép chữ
+    // 2. Tam giác tam hợp: Nét mảnh 1px thanh thoát thích ứng Sáng/Tối
     if (relations.trine && relations.trine.length === 2) {
       const t1Cell = getPalaceCell(relations.trine[0].branch);
       const t2Cell = getPalaceCell(relations.trine[1].branch);
@@ -450,9 +467,9 @@ export function setupChart() {
         const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
         const points = `${activeCenter.x},${activeCenter.y} ${t1Center.x},${t1Center.y} ${t2Center.x},${t2Center.y}`;
         polygon.setAttribute('points', points);
-        polygon.setAttribute('stroke', 'rgba(6, 182, 212, 0.45)');
+        polygon.setAttribute('stroke', trineStroke);
         polygon.setAttribute('stroke-width', '1');
-        polygon.setAttribute('fill', 'rgba(6, 182, 212, 0.02)');
+        polygon.setAttribute('fill', trineFill);
         svgOverlay.appendChild(polygon);
       }
     }
@@ -475,8 +492,8 @@ export function setupChart() {
       const borrowedStars = getBorrowedStars(palace, natal, facts);
 
       card.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div style="font-weight: 700; font-family: var(--font-serif); font-size: 1rem; color: #F8FAFC;">
+        <div class="mobile-card-head">
+          <div class="mobile-card-title">
             Cung ${escapeHtml(palace.labelVi || palace.name)} (${escapeHtml(palace.stemLabelVi)} ${escapeHtml(palace.branchLabelVi)})
           </div>
           <div>
@@ -484,14 +501,14 @@ export function setupChart() {
             ${palace.isBodyPalace || palace.isShenGong ? '<span class="badge-body">THÂN</span>' : ''}
           </div>
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.8rem; margin-top: 4px;">
+        <div class="mobile-card-cols">
           <div>
-            <span style="color: #F59E0B; font-weight: 600;">Các sao còn lại</span>
-            <div style="color: #94A3B8;">${escapeHtml(leftStars.map(s => s.labelVi || s.name).join(', ') || 'Không có')}</div>
+            <span class="mobile-col-label-good">Các sao còn lại</span>
+            <div class="mobile-col-stars">${escapeHtml(leftStars.map(s => s.labelVi || s.name).join(', ') || 'Không có')}</div>
           </div>
           <div>
-            <span style="color: #F43F5E; font-weight: 600;">Sát/hung tinh, Hóa Kỵ, độ sáng thấp</span>
-            <div style="color: #94A3B8;">${escapeHtml(rightStars.map(s => s.labelVi || s.name).join(', ') || 'Không có')}</div>
+            <span class="mobile-col-label-bad">Sát/hung tinh, Hóa Kỵ, độ sáng thấp</span>
+            <div class="mobile-col-stars">${escapeHtml(rightStars.map(s => s.labelVi || s.name).join(', ') || 'Không có')}</div>
           </div>
         </div>
         ${borrowedStars.length ? `<p class="borrowed-stars-box">Mượn đối cung ${escapeHtml(borrowedStars.join(', '))}</p>` : ''}

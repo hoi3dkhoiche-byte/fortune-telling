@@ -2,6 +2,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const core = require('../tuvi-core');
+const modelLayer = require('../tuvi-model');
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.resolve(__dirname, 'public');
@@ -195,6 +196,7 @@ const server = http.createServer(async (req, res) => {
     // 3. Sample chart
     if (req.method === 'GET' && pathname === '/api/sample') {
       const profile = core.getProfile('thienky-candidate');
+      /** @type {import('../tuvi-core').BirthInput} */
       const birth = {
         calendar: 'solar',
         date: '1990-01-01',
@@ -249,7 +251,7 @@ const server = http.createServer(async (req, res) => {
           step: 'user-scenario-selection',
           description: 'Người dùng đã xác nhận kịch bản giờ sinh.',
           data: {
-            reason: normalized.reason,
+            reason: 'reason' in normalized ? normalized.reason : undefined,
             selectedScenario: chart,
             ...(instant === undefined ? {} : { selectedInstant: instant, utcOffsetMinutes }),
           },
@@ -263,6 +265,104 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       sendJson(res, 200, chartResponse(birth, profile, normalized.chart, normalized.audit, normalized.warnings));
+      return;
+    }
+
+    // 5. Corpus stats (1,848 Thiên Kỷ quotes)
+    if (req.method === 'GET' && pathname === '/api/corpus/stats') {
+      const corpus = modelLayer.loadCorpus();
+      sendJson(res, 200, {
+        status: 'ok',
+        lectureCount: corpus.lectureCount,
+        quoteCount: corpus.quotes.length,
+      });
+      return;
+    }
+
+    // 6. Interpret natal chart through anonymized Context -> RAG -> Adapter -> Fact-Checking Validator
+    if (req.method === 'POST' && pathname === '/api/interpret') {
+      const body = await parseJsonBody(req);
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        throw new RequestError(400, 'Dữ liệu gửi lên phải là một đối tượng JSON.');
+      }
+      const {
+        natalResult,
+        birth,
+        profileId = 'thienky-candidate',
+        selectedScenario,
+        selectedInstant,
+        question,
+        focusPalace,
+        mode = process.env.TUVI_MODEL_MODE || 'mock',
+      } = body;
+
+      if (mode !== 'mock' && mode !== 'local') {
+        throw new RequestError(400, "Chế độ model chỉ hỗ trợ 'mock' hoặc 'local'.");
+      }
+      if (question !== undefined && (typeof question !== 'string' || question.length > 500)) {
+        throw new RequestError(400, 'Trường question phải là chuỗi tối đa 500 ký tự.');
+      }
+      if (focusPalace !== undefined && (typeof focusPalace !== 'string' || focusPalace.length > 80)) {
+        throw new RequestError(400, 'Trường focusPalace phải là chuỗi tối đa 80 ký tự.');
+      }
+
+      let resolvedNatal;
+      if (birth !== undefined) {
+        if (!birth || typeof birth !== 'object' || Array.isArray(birth)) {
+          throw new RequestError(400, 'Trường birth phải là một đối tượng JSON.');
+        }
+        if (typeof profileId !== 'string') throw new RequestError(400, 'Mã cấu hình phải là chuỗi.');
+        let profile;
+        try {
+          profile = core.getProfile(profileId);
+        } catch {
+          throw new RequestError(400, 'Cấu hình không hợp lệ hoặc không tồn tại.');
+        }
+        let normalized;
+        try {
+          normalized = core.normalizeBirth(birth, profile);
+        } catch (error) {
+          if (error instanceof RangeError || error instanceof TypeError) {
+            throw new RequestError(400, `Dữ liệu đầu vào không hợp lệ. ${error.message}`);
+          }
+          throw error;
+        }
+        if (selectedScenario != null || selectedInstant !== undefined) {
+          const { chart } = chooseScenario(normalized, selectedScenario, selectedInstant);
+          resolvedNatal = chartResponse(birth, profile, chart, normalized.audit, normalized.warnings);
+        } else if (normalized.status === 'needs') {
+          sendJson(res, 422, { ...normalized, profile });
+          return;
+        } else {
+          resolvedNatal = chartResponse(birth, profile, normalized.chart, normalized.audit, normalized.warnings);
+        }
+      } else if (natalResult && typeof natalResult === 'object' && !Array.isArray(natalResult)) {
+        const rawNatal = natalResult.natal;
+        if (!rawNatal || typeof rawNatal !== 'object' || !Array.isArray(rawNatal.palaces) || rawNatal.palaces.length !== 12) {
+          throw new RequestError(400, 'Trường natalResult.natal phải có đủ 12 cung hợp lệ.');
+        }
+        resolvedNatal = natalResult;
+      } else {
+        throw new RequestError(400, 'Cần truyền trường birth hoặc natalResult để phân tích.');
+      }
+
+      const adapter = mode === 'local'
+        ? modelLayer.createOpenAICompatibleAdapter()
+        : modelLayer.createMockAdapter();
+
+      try {
+        const output = await modelLayer.interpretNatal(resolvedNatal, {
+          adapter,
+          question,
+          focusPalace,
+        });
+        sendJson(res, 200, { status: 'ok', ...output });
+      } catch (error) {
+        if (mode === 'local') {
+          throw new RequestError(503, `Không kết nối được model cục bộ: ${error.message}`);
+        }
+        throw error;
+      }
       return;
     }
 

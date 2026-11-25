@@ -81,3 +81,39 @@ export async function computeNatalApi(birthInput, profileId, selectedScenario, s
     };
   }
 }
+
+let interpretAbortController = null;
+
+/**
+ * @param {{ natalResult: any, question?: string, focusPalace?: string, mode?: string }} params
+ */
+export async function interpretNatalApi({ natalResult, question, focusPalace, mode = 'mock' }) {
+  if (interpretAbortController) {
+    interpretAbortController.abort();
+  }
+  interpretAbortController = new AbortController();
+  try {
+    const res = await fetch('/api/interpret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        natalResult,
+        ...(question ? { question } : {}),
+        ...(focusPalace ? { focusPalace } : {}),
+        mode,
+      }),
+      signal: interpretAbortController.signal,
+    });
+    const data = await res.json().catch(() => ({
+      status: 'error',
+      error: `Phản hồi không phải JSON hợp lệ (Mã HTTP: ${res.status})`,
+    }));
+    return { httpStatus: res.status, data };
+  } catch (err) {
+    if (err.name === 'AbortError') return { aborted: true };
+    return {
+      httpStatus: 0,
+      data: { status: 'error', error: `Lỗi kết nối máy chủ: ${err.message}` },
+    };
+  }
+}

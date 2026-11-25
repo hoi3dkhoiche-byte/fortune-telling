@@ -14,28 +14,30 @@ export function formatUtcOffset(minutes) {
 }
 
 export function setupForm() {
-  const byId = id => document.getElementById(id);
-  const form = byId('birth-form');
+  const byId = id => /** @type {HTMLElement} */ (document.getElementById(id));
+  const inputById = id => /** @type {HTMLInputElement} */ (document.getElementById(id));
+  const form = /** @type {HTMLFormElement} */ (document.getElementById('birth-form'));
   const solarGroup = byId('solar-date-group');
   const lunarGroup = byId('lunar-date-group');
-  const unknownTime = byId('unknown-time');
-  const birthTime = byId('birth-time');
-  const tzSelect = byId('tz-select');
-  const tzCustom = byId('tz-custom');
-  const profileSelect = byId('profile-select');
-  const submitBtn = byId('submit-btn');
-  const sampleBtn = byId('sample-btn');
-  const advToggle = byId('adv-toggle');
+  const unknownTime = inputById('unknown-time');
+  const birthTime = inputById('birth-time');
+  const tzSelect = /** @type {HTMLSelectElement} */ (document.getElementById('tz-select'));
+  const tzCustom = inputById('tz-custom');
+  const profileSelect = /** @type {HTMLSelectElement} */ (document.getElementById('profile-select'));
+  const submitBtn = /** @type {HTMLButtonElement} */ (document.getElementById('submit-btn'));
+  const sampleBtn = /** @type {HTMLButtonElement} */ (document.getElementById('sample-btn'));
+  const advToggle = /** @type {HTMLButtonElement} */ (document.getElementById('adv-toggle'));
   const advContent = byId('adv-content');
-  const conventionSelect = byId('cal-convention');
+  const conventionSelect = /** @type {HTMLSelectElement} */ (document.getElementById('cal-convention'));
   const coordinates = byId('place-coordinates');
-  const latitude = byId('place-lat');
-  const longitude = byId('place-lon');
+  const latitude = inputById('place-lat');
+  const longitude = inputById('place-lon');
   const modal = byId('scenario-modal');
   const modalBody = byId('scenario-modal-body');
-  const modalClose = byId('scenario-modal-close');
+  const modalClose = /** @type {HTMLButtonElement} */ (document.getElementById('scenario-modal-close'));
   let request = 0;
   let pending = null;
+  /** @type {HTMLElement | null} */
   let previousFocus = null;
   let profiles = null;
 
@@ -43,7 +45,8 @@ export function setupForm() {
     advContent.classList.toggle('collapsed', !open);
     advContent.style.display = open ? 'flex' : 'none';
     advToggle.setAttribute('aria-expanded', String(open));
-    advToggle.querySelector('.toggle-icon').textContent = open ? '▾' : '▸';
+    const icon = advToggle.querySelector('.toggle-icon');
+    if (icon) icon.textContent = open ? '▾' : '▸';
   }
 
   function closeModal(restoreFocus = true) {
@@ -120,7 +123,9 @@ export function setupForm() {
       card.append(description, button);
       modalBody.append(card);
     }
-    if (modal.classList.contains('hidden')) previousFocus = document.activeElement;
+    if (modal.classList.contains('hidden')) {
+      previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
     modal.classList.remove('hidden');
     modalClose.focus();
   }
@@ -133,6 +138,7 @@ export function setupForm() {
   }
 
   for (const radio of form.querySelectorAll('input[name="calendar"]')) {
+    if (!(radio instanceof HTMLInputElement)) continue;
     radio.addEventListener('change', () => {
       const lunar = radio.value === 'lunar';
       solarGroup.style.display = lunar ? 'none' : 'flex';
@@ -142,6 +148,7 @@ export function setupForm() {
     });
   }
   for (const radio of form.querySelectorAll('input[name="gender"]')) {
+    if (!(radio instanceof HTMLInputElement)) continue;
     radio.addEventListener('change', () => {
       byId('lbl-gender-male').classList.toggle('active', radio.value === 'male');
       byId('lbl-gender-female').classList.toggle('active', radio.value === 'female');
@@ -164,15 +171,15 @@ export function setupForm() {
       event.preventDefault();
       closeModal();
     } else if (event.key === 'Tab') {
-      const buttons = [...modal.querySelectorAll('button:not([disabled])')];
+      const buttons = /** @type {HTMLButtonElement[]} */ ([...modal.querySelectorAll('button:not([disabled])')]);
       const first = buttons[0];
       const last = buttons.at(-1);
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
-        last.focus();
+        last?.focus();
       } else if (!event.shiftKey && document.activeElement === last) {
         event.preventDefault();
-        first.focus();
+        first?.focus();
       }
     }
   });
@@ -199,27 +206,29 @@ export function setupForm() {
   });
 
   function readForm() {
-    const calendar = form.querySelector('input[name="calendar"]:checked').value;
-    const gender = form.querySelector('input[name="gender"]:checked').value;
+    const calendarEl = /** @type {HTMLInputElement} */ (form.querySelector('input[name="calendar"]:checked'));
+    const genderEl = /** @type {HTMLInputElement} */ (form.querySelector('input[name="gender"]:checked'));
+    const calendar = calendarEl.value;
+    const gender = genderEl.value;
     const tz = tzSelect.value === 'custom' ? tzCustom.value.trim() : tzSelect.value;
     if (!tz) throw new Error('Nhập tên múi giờ IANA của nơi sinh.');
     const time = unknownTime.checked ? null : birthTime.value;
     if (time === '') throw new Error('Nhập giờ sinh hoặc đánh dấu “Chưa rõ giờ sinh”.');
-    let date = byId('solar-date').value;
+    let date = inputById('solar-date').value;
     if (calendar === 'lunar') {
-      const [year, month, day] = ['lunar-year', 'lunar-month', 'lunar-day'].map(id => byId(id).value);
+      const [year, month, day] = ['lunar-year', 'lunar-month', 'lunar-day'].map(id => inputById(id).value);
       if (!year || !month || !day) throw new Error('Nhập đủ ngày, tháng và năm âm lịch.');
       date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     }
     if (!date) throw new Error('Nhập ngày sinh.');
     const birth = { calendar, date, time, tz, gender };
-    if (calendar === 'lunar') birth.isLeap = byId('lunar-leap').checked;
+    if (calendar === 'lunar') birth.isLeap = inputById('lunar-leap').checked;
     if (conventionSelect.value) birth.calendarConvention = conventionSelect.value;
     if (!latitude.disabled && (latitude.value || longitude.value)) {
       if (!latitude.value || !longitude.value) throw new Error('Nhập đủ vĩ độ và kinh độ nơi sinh.');
       birth.place = { lat: latitude.valueAsNumber, lon: longitude.valueAsNumber };
     }
-    return { birth, profileId: profileSelect.value, userName: byId('user-name').value.trim() || 'Đương số' };
+    return { birth, profileId: profileSelect.value, userName: inputById('user-name').value.trim() || 'Đương số' };
   }
 
   function showChart(data, userName, isSample, isImported = false) {
@@ -282,7 +291,7 @@ export function setupForm() {
   // Mở file JSON đã lưu
   const openJsonBtn = document.getElementById('open-json-btn');
   const jsonFileInput = document.getElementById('json-file-input');
-  if (openJsonBtn && jsonFileInput) {
+  if (openJsonBtn && jsonFileInput instanceof HTMLInputElement) {
     openJsonBtn.addEventListener('click', () => jsonFileInput.click());
     jsonFileInput.addEventListener('change', () => {
       const file = jsonFileInput.files?.[0];
@@ -290,6 +299,7 @@ export function setupForm() {
       const reader = new FileReader();
       reader.onload = () => {
         try {
+          if (typeof reader.result !== 'string') throw new Error('Không đọc được nội dung văn bản.');
           const parsed = JSON.parse(reader.result);
           const data = validateImportedChart(parsed);
           showChart(data, data.title || 'Lá số từ file', false, true);

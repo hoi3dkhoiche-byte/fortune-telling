@@ -1,4 +1,5 @@
 import { getDisplayNatal } from './chart.js';
+import { interpretNatalApi } from './api.js';
 
 /** Tóm tắt các nhận định có ID nguồn trong dữ kiện của engine. */
 export function buildFactSummary(result) {
@@ -120,4 +121,179 @@ export function renderFactSummary(container, result) {
     card.append(heading, list);
     container.append(card);
   }
+}
+
+/**
+ * Hiển thị khu vực chạy lớp model luận giải ẩn danh (Mock hoặc LLM cục bộ)
+ * kèm kết quả kiểm định sự thật (Fact-Checking Validator) và trích dẫn bài giảng Thiên Kỷ.
+ */
+export function renderModelPanel(container, result) {
+  if (!result?.natal) return;
+  const card = document.createElement('section');
+  card.className = 'reading-card model-panel';
+
+  const heading = document.createElement('h2');
+  heading.className = 'reading-card-title';
+  heading.textContent = 'Phân tích bằng lớp Model (Đối chiếu sự thật)';
+
+  const privacyNote = document.createElement('p');
+  privacyNote.className = 'model-privacy-note';
+  privacyNote.textContent = 'Quyền riêng tư: ngày giờ sinh, múi giờ và họ tên bị loại bỏ trước khi gửi sang model; chỉ dùng cấu trúc sao/cung ẩn danh và đối chiếu tự động với dữ kiện facts của engine.';
+
+  const controls = document.createElement('div');
+  controls.className = 'model-controls';
+
+  const questionInput = document.createElement('input');
+  questionInput.type = 'text';
+  questionInput.className = 'form-input';
+  questionInput.placeholder = 'Câu hỏi tập trung (tùy chọn, ví dụ: trọng tâm sự nghiệp, điểm cần đề phòng)...';
+  questionInput.maxLength = 500;
+  questionInput.setAttribute('aria-label', 'Câu hỏi phân tích lá số');
+
+  const modeSelect = document.createElement('select');
+  modeSelect.className = 'form-select model-mode-select';
+  modeSelect.setAttribute('aria-label', 'Chế độ model');
+  for (const [val, label] of [
+    ['mock', 'Model giả lập cục bộ (Mock · Offline)'],
+    ['local', 'LLM cục bộ (Ollama / vLLM · localhost)'],
+  ]) {
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = label;
+    modeSelect.append(opt);
+  }
+
+  const runBtn = document.createElement('button');
+  runBtn.type = 'button';
+  runBtn.className = 'btn btn-primary btn-sm';
+  runBtn.textContent = 'Chạy phân tích & đối chiếu';
+
+  controls.append(questionInput, modeSelect, runBtn);
+
+  const outputArea = document.createElement('div');
+  outputArea.className = 'model-output';
+
+  runBtn.addEventListener('click', async () => {
+    runBtn.disabled = true;
+    runBtn.textContent = 'Đang phân tích…';
+    outputArea.replaceChildren();
+    const res = await interpretNatalApi({
+      natalResult: result,
+      question: questionInput.value.trim() || undefined,
+      mode: modeSelect.value,
+    });
+    runBtn.disabled = false;
+    runBtn.textContent = 'Chạy phân tích & đối chiếu';
+    if (res.aborted) return;
+
+    if (res.httpStatus !== 200 || res.data?.status !== 'ok') {
+      const errBox = document.createElement('div');
+      errBox.className = 'alert-box alert-error';
+      errBox.textContent = res.data?.error || `Không chạy được lớp model (HTTP ${res.httpStatus}).`;
+      outputArea.append(errBox);
+      return;
+    }
+
+    const { interpretation, validation, retrievedQuotes = [], adapter } = res.data;
+    const quoteMap = new Map(retrievedQuotes.map(q => [q.id, q]));
+
+    const statusBar = document.createElement('div');
+    statusBar.className = `alert-box ${validation.valid ? 'model-status-ok' : 'alert-warning'}`;
+    statusBar.textContent = validation.valid
+      ? `Đã kiểm định khớp 100% dữ kiện engine (${validation.metrics.groundedClaimCount}/${validation.metrics.claimCount} nhận định · ${validation.metrics.citedFactCount} factIds · Adapter: ${adapter.id} · Không gửi ngày giờ sinh).`
+      : `Bộ kiểm định phát hiện ${validation.errors.length} lỗi cần hiệu chỉnh.`;
+    outputArea.append(statusBar);
+
+    if (interpretation?.summary) {
+      const summaryP = document.createElement('p');
+      summaryP.className = 'reading-card-body';
+      summaryP.textContent = interpretation.summary;
+      outputArea.append(summaryP);
+    }
+
+    if (Array.isArray(interpretation?.claims) && interpretation.claims.length > 0) {
+      const list = document.createElement('ul');
+      list.className = 'reading-card-body model-claim-list';
+      for (const claim of interpretation.claims) {
+        const li = document.createElement('li');
+        li.className = 'model-claim-item';
+        const textP = document.createElement('p');
+        textP.textContent = claim.statement;
+        li.append(textP);
+
+        const meta = document.createElement('div');
+        meta.className = 'model-claim-meta';
+        for (const fid of claim.factIds || []) {
+          const badge = document.createElement('span');
+          badge.className = 'fact-id-pill';
+          badge.textContent = fid;
+          meta.append(badge);
+        }
+        for (const qid of claim.quoteIds || []) {
+          const quote = quoteMap.get(qid);
+          if (quote?.url) {
+            const link = document.createElement('a');
+            link.className = 'quote-id-pill';
+            link.href = quote.url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = `${qid} (${quote.timestamp})`;
+            link.title = quote.text;
+            meta.append(link);
+          }
+        }
+        li.append(meta);
+        list.append(li);
+      }
+      outputArea.append(list);
+    }
+
+    if (Array.isArray(interpretation?.actionGuidance) && interpretation.actionGuidance.length > 0) {
+      const guidanceTitle = document.createElement('h3');
+      guidanceTitle.className = 'model-sub-title';
+      guidanceTitle.textContent = 'Định hướng hành động (Dĩ quả quyết hành)';
+      const guidanceList = document.createElement('ul');
+      guidanceList.className = 'reading-card-body fact-list';
+      for (const item of interpretation.actionGuidance) {
+        const li = document.createElement('li');
+        li.textContent = item;
+        guidanceList.append(li);
+      }
+      outputArea.append(guidanceTitle, guidanceList);
+    }
+
+    if (retrievedQuotes.length > 0) {
+      const details = document.createElement('details');
+      details.className = 'verification';
+      const summary = document.createElement('summary');
+      summary.textContent = `Trích dẫn bài giảng Thiên Kỷ đã truy xuất (${retrievedQuotes.length} câu)`;
+      details.append(summary);
+      const qList = document.createElement('ul');
+      qList.className = 'reading-card-body model-quote-list';
+      for (const q of retrievedQuotes) {
+        const li = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = q.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = `[${q.id} · ${q.sourceFile} ${q.timestamp}]`;
+        const span = document.createElement('span');
+        span.textContent = ` 「${q.text}」`;
+        li.append(link, span);
+        qList.append(li);
+      }
+      details.append(qList);
+      outputArea.append(details);
+    }
+
+    if (interpretation?.disclaimer) {
+      const disc = document.createElement('p');
+      disc.className = 'model-disclaimer';
+      disc.textContent = interpretation.disclaimer;
+      outputArea.append(disc);
+    }
+  });
+
+  card.append(heading, privacyNote, controls, outputArea);
+  container.append(card);
 }

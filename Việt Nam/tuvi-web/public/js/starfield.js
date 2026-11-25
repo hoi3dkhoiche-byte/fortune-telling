@@ -1,143 +1,59 @@
 /**
- * Hiệu ứng Canvas Hạt Sao & Tinh Tú Vũ Trụ Tương Tác
- * Cung cấp nền vũ trụ sống động, chuyển động 60fps mượt mà
+ * Lớp ánh sáng nền tinh tế kiểu Apple Ambient Material.
+ * Tôn trọng tuyệt đối `prefers-reduced-motion` và giữ không gian đọc lá số tĩnh lặng.
  */
-
 export function initStarfield(canvasId = 'starfield-canvas') {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+  const el = document.getElementById(canvasId);
+  if (!(el instanceof HTMLCanvasElement)) return;
+  const canvas = el;
+  const rawCtx = canvas.getContext('2d');
+  if (!rawCtx) return;
+  const ctx = rawCtx;
 
-  let width = (canvas.width = window.innerWidth);
-  let height = (canvas.height = window.innerHeight);
+  const motionQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  const darkQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
 
-  const STARS_COUNT = Math.min(Math.floor((width * height) / 8000), 160);
-  const stars = [];
-  const shootingStars = [];
-
-  const mouse = { x: -1000, y: -1000 };
-
-  window.addEventListener('resize', () => {
-    width = canvas.width = window.innerWidth;
-    height = canvas.height = window.innerHeight;
-  });
-
-  window.addEventListener('mousemove', e => {
-    mouse.x = e.clientX;
-    mouse.y = e.clientY;
-  });
-
-  window.addEventListener('mouseleave', () => {
-    mouse.x = -1000;
-    mouse.y = -1000;
-  });
-
-  // Khởi tạo các vì sao
-  const starColors = ['#FFFFFF', '#FDE047', '#A5F3FC', '#E9D5FF', '#FDBA74'];
-  for (let i = 0; i < STARS_COUNT; i++) {
-    stars.push({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      radius: Math.random() * 1.5 + 0.4,
-      color: starColors[Math.floor(Math.random() * starColors.length)],
-      alpha: Math.random() * 0.7 + 0.3,
-      alphaSpeed: (Math.random() * 0.02 + 0.005) * (Math.random() > 0.5 ? 1 : -1),
-      vx: (Math.random() - 0.5) * 0.15,
-      vy: (Math.random() - 0.5) * 0.15,
-    });
+  function isDarkActive() {
+    const explicit = document.documentElement.dataset.theme;
+    if (explicit === 'dark') return true;
+    if (explicit === 'light') return false;
+    return Boolean(darkQuery?.matches);
   }
 
-  // Tạo sao băng định kỳ
-  function spawnShootingStar() {
-    if (Math.random() < 0.015 && shootingStars.length < 2) {
-      shootingStars.push({
-        x: Math.random() * width,
-        y: Math.random() * (height * 0.4),
-        length: Math.random() * 80 + 50,
-        speed: Math.random() * 6 + 7,
-        angle: Math.PI / 4 + (Math.random() - 0.5) * 0.2,
-        opacity: 1,
-      });
-    }
-  }
-
-  // Animation Loop
-  function animate() {
+  function renderAmbient() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
-    // 1. Vẽ các đường chòm sao tương tác với chuột
-    for (let i = 0; i < stars.length; i++) {
-      const s = stars[i];
-
-      // Di chuyển chậm
-      s.x += s.vx;
-      s.y += s.vy;
-      if (s.x < 0) s.x = width;
-      if (s.x > width) s.x = 0;
-      if (s.y < 0) s.y = height;
-      if (s.y > height) s.y = 0;
-
-      // Nhấp nháy nhẹ
-      s.alpha += s.alphaSpeed;
-      if (s.alpha > 0.95 || s.alpha < 0.2) {
-        s.alphaSpeed = -s.alphaSpeed;
-      }
-
-      // Nối đường với chuột nếu ở gần
-      const dxMouse = s.x - mouse.x;
-      const dyMouse = s.y - mouse.y;
-      const distMouse = Math.sqrt(dxMouse * dxMouse + dyMouse * dyMouse);
-      if (distMouse < 130) {
-        ctx.beginPath();
-        ctx.moveTo(s.x, s.y);
-        ctx.lineTo(mouse.x, mouse.y);
-        ctx.strokeStyle = `rgba(168, 85, 247, ${0.4 * (1 - distMouse / 130)})`;
-        ctx.lineWidth = 0.8;
-        ctx.stroke();
-      }
-
-      // Vẽ ngôi sao
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
-      ctx.fillStyle = s.color;
-      ctx.globalAlpha = Math.max(0.1, Math.min(1, s.alpha));
-      ctx.shadowBlur = s.radius * 3;
-      ctx.shadowColor = s.color;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
+    // Paint a single whisper-soft Apple atmospheric radial glow — zero busy particle clutter.
+    const dark = isDarkActive();
+    const cx = width * 0.5;
+    const cy = height * 0.14;
+    const radius = Math.max(width, height) * 0.65;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    if (dark) {
+      grad.addColorStop(0, 'rgba(10, 132, 255, 0.10)');
+      grad.addColorStop(0.5, 'rgba(94, 92, 230, 0.04)');
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    } else {
+      grad.addColorStop(0, 'rgba(0, 113, 227, 0.055)');
+      grad.addColorStop(0.55, 'rgba(175, 82, 222, 0.02)');
+      grad.addColorStop(1, 'rgba(245, 245, 247, 0)');
     }
-
-    // 2. Vẽ sao băng
-    spawnShootingStar();
-    for (let i = shootingStars.length - 1; i >= 0; i--) {
-      const ss = shootingStars[i];
-      const tailX = ss.x - Math.cos(ss.angle) * ss.length;
-      const tailY = ss.y - Math.sin(ss.angle) * ss.length;
-
-      const grad = ctx.createLinearGradient(tailX, tailY, ss.x, ss.y);
-      grad.addColorStop(0, 'rgba(255, 255, 255, 0)');
-      grad.addColorStop(1, `rgba(253, 224, 71, ${ss.opacity})`);
-
-      ctx.beginPath();
-      ctx.moveTo(tailX, tailY);
-      ctx.lineTo(ss.x, ss.y);
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      ss.x += Math.cos(ss.angle) * ss.speed;
-      ss.y += Math.sin(ss.angle) * ss.speed;
-      ss.opacity -= 0.015;
-
-      if (ss.opacity <= 0 || ss.x > width || ss.y > height) {
-        shootingStars.splice(i, 1);
-      }
-    }
-
-    requestAnimationFrame(animate);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
   }
 
-  animate();
+  renderAmbient();
+  window.addEventListener('resize', renderAmbient, { passive: true });
+  darkQuery?.addEventListener?.('change', renderAmbient);
+  motionQuery?.addEventListener?.('change', renderAmbient);
+
+  // Re-render when manual theme attribute changes
+  const observer = new MutationObserver(renderAmbient);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 }

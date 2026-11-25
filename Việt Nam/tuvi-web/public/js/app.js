@@ -4,7 +4,7 @@ import { initStarfield } from './starfield.js';
 import { setupForm } from './form.js';
 import { setupChart } from './chart.js';
 import { setupDetails } from './details.js';
-import { renderFactSummary } from './reading.js';
+import { renderFactSummary, renderModelPanel } from './reading.js';
 import { buildVerification } from './verification.js';
 
 const needsCopy = {
@@ -22,11 +22,12 @@ const profileNames = {
 };
 
 function setupViewNavigation() {
-  const views = Object.fromEntries(['input', 'chart', 'reading'].map(view => [view, document.getElementById(`view-${view}`)]));
-  const readings = document.getElementById('reading-container');
-  const verification = document.getElementById('chart-verification');
-  const profileBadge = document.getElementById('profile-badge');
-  const sampleBadge = document.getElementById('sample-badge');
+  const mustEl = id => /** @type {HTMLElement} */ (document.getElementById(id));
+  const views = Object.fromEntries(['input', 'chart', 'reading'].map(view => [view, mustEl(`view-${view}`)]));
+  const readings = mustEl('reading-container');
+  const verification = mustEl('chart-verification');
+  const profileBadge = mustEl('profile-badge');
+  const sampleBadge = mustEl('sample-badge');
   const importedBadge = document.getElementById('imported-badge');
   let renderedResult;
   let renderedSummary;
@@ -52,6 +53,7 @@ function setupViewNavigation() {
     if (s.currentView === 'reading' && s.currentNatal !== renderedSummary) {
       renderedSummary = s.currentNatal;
       renderFactSummary(readings, renderedSummary);
+      renderModelPanel(readings, renderedSummary);
     }
   });
 
@@ -62,19 +64,19 @@ function setupViewNavigation() {
     'back-to-chart-btn': 'chart',
   };
   for (const [id, view] of Object.entries(links)) {
-    document.getElementById(id).addEventListener('click', () => state.setView(view));
+    mustEl(id).addEventListener('click', () => state.setView(view));
   }
   const tabs = document.querySelectorAll('.view-mode-tab');
   for (const tab of tabs) {
     tab.addEventListener('click', () => {
       for (const item of tabs) item.classList.toggle('active', item === tab);
-      state.setViewMode(tab.dataset.mode);
+      if (tab instanceof HTMLElement) state.setViewMode(tab.dataset.mode);
     });
   }
 }
 
 function setupAlerts(form) {
-  const container = document.getElementById('global-alert-container');
+  const container = /** @type {HTMLElement} */ (document.getElementById('global-alert-container'));
   let previousError;
   let previousNeeds;
   state.subscribe(({ error, needsInfo }) => {
@@ -104,7 +106,60 @@ function setupAlerts(form) {
   });
 }
 
+function setupThemeToggle() {
+  const button = document.getElementById('theme-toggle-btn');
+  if (!button) return;
+  const darkQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+
+  const resolveTheme = () => {
+    const saved = document.documentElement.dataset.theme;
+    if (saved === 'light' || saved === 'dark') return saved;
+    return darkQuery?.matches ? 'dark' : 'light';
+  };
+
+  const syncMetaThemeColor = (active, isManual) => {
+    const lightMeta = document.querySelector('meta[name="theme-color"][media*="light"]');
+    const darkMeta = document.querySelector('meta[name="theme-color"][media*="dark"]');
+    if (!lightMeta || !darkMeta) return;
+    if (isManual) {
+      const color = active === 'dark' ? '#000000' : '#F5F5F7';
+      lightMeta.setAttribute('content', color);
+      darkMeta.setAttribute('content', color);
+    } else {
+      lightMeta.setAttribute('content', '#F5F5F7');
+      darkMeta.setAttribute('content', '#000000');
+    }
+  };
+
+  const syncLabel = () => {
+    const active = resolveTheme();
+    const isManual = document.documentElement.dataset.theme === 'light'
+      || document.documentElement.dataset.theme === 'dark';
+    button.textContent = active === 'dark' ? 'Sáng' : 'Tối';
+    button.setAttribute('aria-pressed', String(active === 'dark'));
+    syncMetaThemeColor(active, isManual);
+  };
+
+  try {
+    const stored = localStorage.getItem('thienky-theme');
+    if (stored === 'light' || stored === 'dark') {
+      document.documentElement.dataset.theme = stored;
+    }
+  } catch { /* ignore storage restrictions */ }
+
+  syncLabel();
+  darkQuery?.addEventListener?.('change', syncLabel);
+
+  button.addEventListener('click', () => {
+    const next = resolveTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('thienky-theme', next); } catch { /* ignore */ }
+    syncLabel();
+  });
+}
+
 async function init() {
+  setupThemeToggle();
   initStarfield('starfield-canvas');
   const form = setupForm();
   setupViewNavigation();

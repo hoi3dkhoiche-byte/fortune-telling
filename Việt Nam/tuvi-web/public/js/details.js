@@ -1,10 +1,10 @@
-/** Bảng dữ kiện của cung đang chọn. */
+/** Bảng dữ kiện của cung đang chọn (Apple Inspector Sidebar). */
 
 import { state } from './state.js';
 import { escapeHtml, getBorrowedStars, getDisplayNatal, getStarBrightness, getStarTransformation, partitionStars } from './chart.js';
 
 export function setupDetails() {
-  const detailsBody = document.getElementById('details-body');
+  const detailsBody = /** @type {HTMLElement} */ (document.getElementById('details-body'));
 
   state.subscribe(s => {
     renderDetails(s);
@@ -15,7 +15,7 @@ export function setupDetails() {
 
     if (!currentNatal) {
       detailsBody.innerHTML = `
-        <div style="text-align: center; color: #94A3B8; padding: 40px 10px; font-size: 0.85rem;">
+        <div class="details-empty">
           Chưa có lá số để hiển thị chi tiết.
         </div>
       `;
@@ -28,8 +28,8 @@ export function setupDetails() {
     const palace = natal.palaces.find(p => p.branch === selectedBranch);
     if (!palace) {
       detailsBody.innerHTML = `
-        <div style="text-align: center; color: #94A3B8; padding: 40px 10px; font-size: 0.85rem;">
-          Chọn một cung trên Bàn Cờ để soi chiếu chi tiết.
+        <div class="details-empty">
+          Chọn một cung trên bàn cờ để xem chi tiết.
         </div>
       `;
       return;
@@ -45,16 +45,14 @@ export function setupDetails() {
     detailsBody.innerHTML = `
       <!-- Tiêu Đề Cung -->
       <div class="detail-section">
-        <div style="display: flex; justify-content: space-between; align-items: baseline;">
-          <h3 style="font-family: var(--font-serif); font-size: 1.35rem; color: #F59E0B; font-weight: 700; text-shadow: 0 0 10px rgba(245, 158, 11, 0.3);">
-            Cung ${escapeHtml(palace.labelVi || palace.name)}
-          </h3>
-          <span style="font-size: 0.85rem; font-weight: 600; color: #94A3B8;">
+        <div class="detail-palace-head">
+          <h3 class="detail-palace-title">Cung ${escapeHtml(palace.labelVi || palace.name)}</h3>
+          <span class="detail-palace-canchi">
             ${escapeHtml(palace.stemLabelVi)} ${escapeHtml(palace.branchLabelVi)}
           </span>
         </div>
-        <div style="display: flex; gap: 8px; align-items: center; font-size: 0.85rem; margin-top: 4px;">
-          <span>Đại hạn: <strong style="color: #F8FAFC;">${escapeHtml(daXianRange)}</strong></span>
+        <div class="detail-palace-meta">
+          <span>Đại hạn: <strong>${escapeHtml(daXianRange)}</strong></span>
           ${palace.isMingGong || palace.isMingPalace ? '<span class="badge-ming">MỆNH</span>' : ''}
           ${palace.isBodyPalace || palace.isShenGong ? '<span class="badge-body">THÂN</span>' : ''}
         </div>
@@ -63,23 +61,23 @@ export function setupDetails() {
       ${isEmpty ? `
         <div class="detail-section">
           <div class="detail-section-title">Vô chính diệu</div>
-          <p>Cung này không có chính tinh tọa thủ.</p>
-          ${borrowedStars.length ? `<p>Mượn chính tinh từ đối cung: ${escapeHtml(borrowedStars.join(', '))}</p>` : ''}
+          <p class="detail-note">Cung này không có chính tinh tọa thủ.</p>
+          ${borrowedStars.length ? `<p class="detail-note">Mượn chính tinh từ đối cung: <strong>${escapeHtml(borrowedStars.join(', '))}</strong></p>` : ''}
         </div>
       ` : ''}
 
       <div class="detail-section">
-        <div class="detail-section-title" style="color: #F59E0B;">Các sao còn lại (${leftStars.length})</div>
-        <div style="display: flex; flex-direction: column; gap: 6px;">
-          ${leftStars.length === 0 ? '<span style="color: #94A3B8;">Không có sao trong nhóm này.</span>' : ''}
+        <div class="detail-section-title tone-good">Các sao còn lại (${leftStars.length})</div>
+        <div class="detail-star-list">
+          ${leftStars.length === 0 ? '<span class="detail-star-empty">Không có sao trong nhóm này.</span>' : ''}
           ${leftStars.map(star => renderDetailStarItem(star, true)).join('')}
         </div>
       </div>
 
       <div class="detail-section">
-        <div class="detail-section-title" style="color: #F43F5E;">Sát/hung tinh, Hóa Kỵ, độ sáng thấp (${rightStars.length})</div>
-        <div style="display: flex; flex-direction: column; gap: 6px;">
-          ${rightStars.length === 0 ? '<span style="color: #94A3B8;">Không có sao trong nhóm này.</span>' : ''}
+        <div class="detail-section-title tone-bad">Sát/hung tinh, Hóa Kỵ, độ sáng thấp (${rightStars.length})</div>
+        <div class="detail-star-list">
+          ${rightStars.length === 0 ? '<span class="detail-star-empty">Không có sao trong nhóm này.</span>' : ''}
           ${rightStars.map(star => renderDetailStarItem(star, false)).join('')}
         </div>
       </div>
@@ -87,19 +85,19 @@ export function setupDetails() {
       <!-- Tam Phương Tứ Chính Hội Chiếu -->
       ${relations ? `
         <div class="detail-section">
-          <div class="detail-section-title" style="color: #A855F7;">Tam Phương Tứ Chính (Hội chiếu)</div>
-          <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem;">
-            <div style="display: flex; align-items: center; justify-content: space-between;">
-              <span style="color: #EF4444; font-weight: 600;">Đối cung (Xung chiếu):</span>
-              <button class="btn btn-ghost btn-sm rel-jump-btn" data-branch="${escapeHtml(relations.opposite.branch)}" type="button">
+          <div class="detail-section-title tone-rel">Tam phương tứ chính</div>
+          <div class="detail-rel-group">
+            <div class="detail-rel-row">
+              <span class="detail-rel-label-opp">Đối cung</span>
+              <button class="btn btn-sm rel-jump-btn" data-branch="${escapeHtml(relations.opposite.branch)}" type="button">
                 ${escapeHtml(getPalaceNameByBranch(natal, relations.opposite.branch))}
               </button>
             </div>
             <div>
-              <span style="color: #06B6D4; font-weight: 600; display: block; margin-bottom: 4px;">Tam hợp chiếu:</span>
-              <div style="display: flex; gap: 6px;">
+              <span class="detail-rel-label-trine">Tam hợp chiếu</span>
+              <div class="detail-trine-btns">
                 ${relations.trine.map(t => `
-                  <button class="btn btn-ghost btn-sm rel-jump-btn" data-branch="${escapeHtml(t.branch)}" type="button" style="flex: 1;">
+                  <button class="btn btn-sm rel-jump-btn" data-branch="${escapeHtml(t.branch)}" type="button">
                     ${escapeHtml(getPalaceNameByBranch(natal, t.branch))}
                   </button>
                 `).join('')}
@@ -109,9 +107,9 @@ export function setupDetails() {
         </div>
       ` : ''}
 
-      <div style="margin-top: 6px;">
-        <button class="btn btn-primary" id="side-goto-reading-btn" type="button" style="width: 100%; padding: 11px; font-size: 0.95rem; font-weight: 700; background: linear-gradient(135deg, #7C3AED, #D97706); box-shadow: 0 0 15px rgba(124, 58, 237, 0.4);">
-          Xem dữ kiện lá số
+      <div class="detail-cta-wrap">
+        <button class="btn btn-primary" id="side-goto-reading-btn" type="button">
+          Xem dữ kiện lá số ›
         </button>
       </div>
     `;
@@ -125,6 +123,7 @@ export function setupDetails() {
 
     detailsBody.querySelectorAll('.rel-jump-btn').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (!(btn instanceof HTMLElement)) return;
         const branch = Number(btn.dataset.branch);
         if (Number.isInteger(branch)) state.selectPalace(branch);
       });
@@ -135,17 +134,16 @@ export function setupDetails() {
     const isMajor = star.type === 'major';
     const brightness = getStarBrightness(star);
     const sihua = getStarTransformation(star);
+    const nameCls = `detail-star-name ${isMajor ? 'is-major' : ''} ${!isLeftColumn ? 'is-bad' : ''}`;
 
     return `
-      <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(30, 41, 59, 0.4); padding: 5px 8px; border-radius: 4px; border: 1px solid rgba(148, 163, 184, 0.1);">
-        <div style="display: flex; align-items: center; gap: 6px;">
-          <span style="font-weight: ${isMajor ? '700' : '500'}; color: ${isMajor ? (isLeftColumn ? '#FBBF24' : '#F87171') : (isLeftColumn ? '#E2E8F0' : '#A855F7')}; font-size: 0.85rem;">
-            ${escapeHtml(star.labelVi || star.name)}
-          </span>
-          ${isMajor ? '<span style="font-size: 0.65rem; color: #94A3B8;">(Chính tinh)</span>' : ''}
+      <div class="detail-star-row">
+        <div class="detail-star-left">
+          <span class="${nameCls}">${escapeHtml(star.labelVi || star.name)}</span>
+          ${isMajor ? '<span class="detail-major-tag">Chính tinh</span>' : ''}
           ${brightness.label ? `<span class="star-bright star-bright-${brightness.className}">(${escapeHtml(brightness.label)})</span>` : ''}
         </div>
-        <div style="display: flex; gap: 4px;">
+        <div>
           ${sihua.label ? `<span class="sihua-badge ${sihua.className}" title="${escapeHtml(sihua.label)}">${escapeHtml(sihua.shortLabel)}</span>` : ''}
         </div>
       </div>

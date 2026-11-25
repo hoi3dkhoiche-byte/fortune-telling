@@ -2,65 +2,65 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#030712">
-  <title>Thiên Kỷ — Khám Phá Lá Số Tử Vi Đẩu Số Vũ Trụ</title>
-  <link rel="stylesheet" href="/css/styles.css?v=cosmic-refined">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F5F5F7">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
+  <title>THIÊN KỶ — Lập Lá Số Tử Vi Đẩu Số</title>
+  <link rel="stylesheet" href="/css/styles.css?v=apple-hig-v1">
 </head>
 <body>
-  <!-- Canvas Vũ Trụ Hạt Sao Tương Tác -->
-  <canvas id="starfield-canvas"></canvas>
+  <!-- Lớp ánh sáng nền tinh tế (tự động tắt khi reduced-motion) -->
+  <canvas id="starfield-canvas" aria-hidden="true"></canvas>
 
   <div class="app-container">
-    <!-- Header Vũ Trụ -->
+    <!-- Thanh điều hướng kính mờ kiểu macOS / iOS -->
     <header class="app-header">
       <div class="brand">
-        <h1 class="brand-title">THIÊN KỶ</h1>
-        <span class="brand-sub">Tử Vi Đẩu Số Vũ Trụ</span>
+        <h1 class="brand-title">Thiên Kỷ</h1>
+        <span class="brand-sub">Tử Vi Đẩu Số</span>
       </div>
 
       <div class="header-badges">
         <span class="badge-tag" id="profile-badge"></span>
-        <span class="badge-tag hidden" id="sample-badge">Lá số mẫu</span>
-        <span class="badge-tag hidden" id="imported-badge">Mở từ file · Chưa kiểm tra lại</span>
+        <span class="badge-tag sample hidden" id="sample-badge">Lá số mẫu</span>
+        <span class="badge-tag candidate hidden" id="imported-badge">Mở từ file · Chưa kiểm tra lại</span>
+        <button class="btn-icon-pill" id="theme-toggle-btn" type="button" aria-label="Chuyển chế độ Sáng hoặc Tối">Tối</button>
       </div>
     </header>
 
-    <!-- Global Alert Container -->
-    <div id="global-alert-container" aria-live="polite" style="padding: 10px 20px 0 20px;"></div>
+    <!-- Thông báo trạng thái toàn cục -->
+    <div id="global-alert-container" class="global-alert-wrap" aria-live="polite"></div>
 
     <!-- ======================================================================
-         MÀN HÌNH 1: NHẬP DỮ KIỆN LẬP SỐ (COSMIC PORTAL)
+         MÀN HÌNH 1: NHẬP DỮ KIỆN LẬP SỐ (APPLE INSET GROUPED SHEET)
          ====================================================================== -->
     <section class="view-screen" id="view-input">
       <div class="input-screen-wrapper">
         <div class="portal-card">
           <div class="portal-header">
-            <h2 class="portal-title">KHÁM PHÁ MỆNH BÀN</h2>
-            <p class="portal-desc">Nhập ngày giờ sinh để khởi tạo tinh bàn Tử Vi Đẩu Số</p>
+            <h2 class="portal-title">Lập lá số bản mệnh</h2>
+            <p class="portal-desc">Nhập ngày giờ sinh chính xác để khởi tạo tinh bàn Tử Vi Đẩu Số theo hệ phái Thiên Kỷ.</p>
           </div>
 
-          <form id="birth-form" novalidate>
+          <form id="birth-form" class="apple-form" novalidate>
             <!-- Họ tên -->
             <div class="form-group">
-              <label class="form-label" for="user-name">Họ tên đương số (tùy chọn)</label>
-              <input class="form-input" type="text" id="user-name" placeholder="Ví dụ: Nguyễn Văn A" maxlength="60" />
+              <label class="form-label" for="user-name">Họ tên đương số <span class="label-optional">Tùy chọn</span></label>
+              <input class="form-input" type="text" id="user-name" placeholder="Ví dụ: Nguyễn Văn A" maxlength="60" autocomplete="name" />
             </div>
 
             <!-- Hệ thống lịch: Dương / Âm -->
             <div class="form-group">
               <label class="form-label">Hệ thống lịch sinh</label>
-              <div class="segmented-control" role="radiogroup">
+              <div class="segmented-control" role="radiogroup" aria-label="Hệ thống lịch sinh">
                 <label class="segmented-btn active" id="lbl-cal-solar">
-                  <input type="radio" name="calendar" value="solar" checked style="display: none;" />
-                  Dương Lịch
+                  <input type="radio" name="calendar" value="solar" checked class="sr-only" />
+                  Dương lịch
                 </label>
                 <label class="segmented-btn" id="lbl-cal-lunar">
-                  <input type="radio" name="calendar" value="lunar" style="display: none;" />
-                  Âm Lịch
+                  <input type="radio" name="calendar" value="lunar" class="sr-only" />
+                  Âm lịch
                 </label>
               </div>
             </div>
@@ -75,11 +75,11 @@
             <div class="form-group" id="lunar-date-group" style="display: none;">
               <label class="form-label">Ngày sinh (Âm lịch)</label>
               <div class="row-3">
-                <input class="form-input" type="number" id="lunar-day" placeholder="Ngày" min="1" max="30" value="1" />
-                <input class="form-input" type="number" id="lunar-month" placeholder="Tháng" min="1" max="12" value="1" />
-                <input class="form-input" type="number" id="lunar-year" placeholder="Năm" min="1900" max="2050" value="1990" />
+                <input class="form-input" type="number" inputmode="numeric" id="lunar-day" placeholder="Ngày" min="1" max="30" value="1" />
+                <input class="form-input" type="number" inputmode="numeric" id="lunar-month" placeholder="Tháng" min="1" max="12" value="1" />
+                <input class="form-input" type="number" inputmode="numeric" id="lunar-year" placeholder="Năm" min="1900" max="2050" value="1990" />
               </div>
-              <label class="checkbox-label" style="margin-top: 6px;">
+              <label class="checkbox-label checkbox-spaced">
                 <input type="checkbox" id="lunar-leap" />
                 <span>Sinh vào tháng nhuận</span>
               </label>
@@ -88,7 +88,7 @@
             <!-- Giờ sinh & Chưa rõ giờ sinh -->
             <div class="form-group">
               <div class="form-label">
-                <span>Giờ & Phút sinh</span>
+                <span>Giờ &amp; phút sinh</span>
                 <label class="checkbox-label">
                   <input type="checkbox" id="unknown-time" />
                   <span>Chưa rõ giờ sinh</span>
@@ -100,14 +100,14 @@
             <!-- Giới tính -->
             <div class="form-group">
               <label class="form-label">Giới tính</label>
-              <div class="segmented-control" role="radiogroup">
+              <div class="segmented-control" role="radiogroup" aria-label="Giới tính">
                 <label class="segmented-btn active" id="lbl-gender-male">
-                  <input type="radio" name="gender" value="male" checked style="display: none;" />
-                  Nam Mệnh
+                  <input type="radio" name="gender" value="male" checked class="sr-only" />
+                  Nam mệnh
                 </label>
                 <label class="segmented-btn" id="lbl-gender-female">
-                  <input type="radio" name="gender" value="female" style="display: none;" />
-                  Nữ Mệnh
+                  <input type="radio" name="gender" value="female" class="sr-only" />
+                  Nữ mệnh
                 </label>
               </div>
             </div>
@@ -124,46 +124,47 @@
                 <option value="Europe/Paris">Europe/Paris (Pháp / Tây Âu)</option>
                 <option value="America/New_York">America/New_York (Mỹ - Miền Đông)</option>
                 <option value="America/Los_Angeles">America/Los_Angeles (Mỹ - Miền Tây)</option>
-                <option value="custom">Nhập mã múi giờ IANA tùy chọn...</option>
+                <option value="custom">Nhập mã múi giờ IANA tùy chọn…</option>
               </select>
             </div>
 
             <div class="form-group" id="tz-custom-group" style="display: none;">
               <label class="form-label" for="tz-custom">Mã IANA Zone</label>
-              <input class="form-input" type="text" id="tz-custom" placeholder="Ví dụ: Australia/Sydney" />
+              <input class="form-input" type="text" id="tz-custom" placeholder="Ví dụ: Australia/Sydney" autocapitalize="none" autocorrect="off" />
             </div>
 
             <!-- Tùy chọn nâng cao -->
-            <div class="form-group" style="margin-top: 4px;">
-              <button class="btn btn-ghost btn-sm" id="adv-toggle" type="button" aria-controls="adv-content" aria-expanded="false" style="padding-left: 0;">
-                <span class="toggle-icon">▸</span> Tùy chọn nâng cao
+            <div class="form-group advanced-group">
+              <button class="btn btn-disclosure" id="adv-toggle" type="button" aria-controls="adv-content" aria-expanded="false">
+                <span class="toggle-icon">▸</span>
+                <span>Tùy chọn nâng cao</span>
               </button>
-              <div class="collapsed" id="adv-content" style="display: none; flex-direction: column; gap: 10px; margin-top: 8px;">
+              <div class="collapsed adv-panel" id="adv-content" style="display: none; flex-direction: column; gap: 10px;">
                 <div class="row-2 hidden" id="place-coordinates">
-                  <input class="form-input" type="number" id="place-lat" aria-label="Vĩ độ nơi sinh" placeholder="Vĩ độ" min="-90" max="90" step="any" disabled />
-                  <input class="form-input" type="number" id="place-lon" aria-label="Kinh độ nơi sinh" placeholder="Kinh độ" min="-180" max="180" step="any" disabled />
+                  <input class="form-input" type="number" inputmode="decimal" id="place-lat" aria-label="Vĩ độ nơi sinh" placeholder="Vĩ độ" min="-90" max="90" step="any" disabled />
+                  <input class="form-input" type="number" inputmode="decimal" id="place-lon" aria-label="Kinh độ nơi sinh" placeholder="Kinh độ" min="-180" max="180" step="any" disabled />
                 </div>
-                <select class="form-select" id="cal-convention">
+                <select class="form-select" id="cal-convention" aria-label="Quy ước lịch">
                   <option value="" selected>Tự động so sánh lịch (Mặc định)</option>
-                  <option value="chinese">Quy ước Lịch Trung Quốc (chinese)</option>
                   <option value="vietnamese">Quy ước Lịch Việt Nam (vietnamese)</option>
+                  <option value="chinese">Quy ước Lịch Trung Quốc (chinese)</option>
                 </select>
-                <select class="form-select" id="profile-select">
-                  <option value="thienky-candidate" selected>thienky-candidate [Đang kiểm chứng]</option>
-                  <option value="repro-v4">repro-v4 (Đối chiếu dataset)</option>
+                <select class="form-select" id="profile-select" aria-label="Cấu hình lập số">
+                  <option value="thienky-candidate" selected>thienky-candidate · Đang kiểm chứng</option>
+                  <option value="repro-v4">repro-v4 · Đối chiếu dataset</option>
                 </select>
               </div>
             </div>
 
             <!-- Hành động khởi tạo -->
-            <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 14px;">
-              <button class="btn btn-primary" id="submit-btn" type="submit" style="padding: 13px; font-size: 1.05rem;">
+            <div class="form-actions">
+              <button class="btn btn-primary btn-lg" id="submit-btn" type="submit">
                 Khởi tạo lá số
               </button>
               <button class="btn btn-secondary" id="sample-btn" type="button">
-                Khám Phá Lá Số Mẫu
+                Xem lá số mẫu
               </button>
-              <button class="btn btn-ghost btn-sm" id="open-json-btn" type="button" style="align-self: center; opacity: 0.7;">
+              <button class="btn btn-link btn-sm" id="open-json-btn" type="button">
                 Mở file lá số JSON
               </button>
               <input type="file" id="json-file-input" accept=".json" style="display: none;" />
@@ -174,31 +175,31 @@
     </section>
 
     <!-- ======================================================================
-         MÀN HÌNH 2: BÀN CỜ LÁ SỐ 4x4 (COSMIC NATAL CHART VIEW)
+         MÀN HÌNH 2: BÀN CỜ LÁ SỐ 4×4 (APPLE PRECISION WORKSPACE)
          ====================================================================== -->
     <section class="view-screen hidden" id="view-chart">
-      <!-- Chart Screen Top Bar -->
+      <!-- Chart Screen Toolbar -->
       <div class="chart-screen-header">
         <button class="btn btn-secondary btn-sm" id="back-to-input-btn" type="button">
           ‹ Nhập dữ kiện khác
         </button>
 
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <button class="btn btn-primary btn-sm" id="top-goto-reading-btn" type="button" style="background: linear-gradient(135deg, #9333EA, #D97706); box-shadow: 0 0 12px rgba(147, 51, 234, 0.4);">
+        <div class="chart-toolbar-right">
+          <button class="btn btn-primary btn-sm" id="top-goto-reading-btn" type="button">
             Dữ kiện lá số
           </button>
 
-          <div class="view-mode-tabs" role="tablist">
-            <button class="btn btn-secondary btn-sm view-mode-tab active" data-mode="grid" type="button">Bàn cờ 4×4</button>
-            <button class="btn btn-ghost btn-sm view-mode-tab" data-mode="list" type="button">12 Cung</button>
+          <div class="view-mode-tabs segmented-control segmented-compact" role="tablist" aria-label="Chế độ xem bàn cờ">
+            <button class="segmented-btn view-mode-tab active" data-mode="grid" type="button">Bàn cờ 4×4</button>
+            <button class="segmented-btn view-mode-tab" data-mode="list" type="button">12 Cung</button>
           </div>
         </div>
       </div>
 
-      <!-- Main Layout: Bàn Cờ 4x4 & Cột Chi Tiết Cung -->
+      <!-- Main Layout: Bàn Cờ 4×4 & Cột Chi Tiết Cung -->
       <div class="chart-layout">
-        <!-- Bàn Cờ 4x4 -->
-        <div>
+        <!-- Bàn Cờ 4×4 -->
+        <div class="board-column">
           <div class="board-container" id="board-container">
             <div class="chart-grid" id="chart-grid">
               <svg class="relations-svg-overlay" id="relations-svg"></svg>
@@ -229,45 +230,41 @@
           <div class="mobile-card-list" id="mobile-card-list"></div>
         </div>
 
-        <!-- Cột Chi Tiết Cung Bên Phải -->
-        <aside class="details-panel">
-          <div style="font-family: var(--font-serif); font-size: 1.1rem; color: #FDE047; font-weight: 700; border-bottom: 1px solid rgba(148, 163, 184, 0.15); padding-bottom: 8px;">
-            Chi Tiết Cung Vị
-          </div>
+        <!-- Cột Chi Tiết Cung Bên Phải (macOS Inspector Sidebar) -->
+        <aside class="details-panel" aria-label="Chi tiết cung vị">
+          <div class="details-panel-header">Chi tiết cung vị</div>
           <div id="details-body"></div>
         </aside>
       </div>
 
-      <div id="chart-verification"></div>
+      <div id="chart-verification" class="verification-wrapper"></div>
       <div class="reading-action-bar">
-        <button class="btn-reading-huge" id="goto-reading-btn" type="button">
-          Xem dữ kiện lá số
+        <button class="btn btn-primary btn-reading-huge" id="goto-reading-btn" type="button">
+          Xem dữ kiện &amp; phân tích lá số ›
         </button>
       </div>
     </section>
 
     <!-- ======================================================================
-         MÀN HÌNH 3: DỮ KIỆN LÁ SỐ
+         MÀN HÌNH 3: DỮ KIỆN LÁ SỐ & LỚP MODEL
          ====================================================================== -->
     <section class="view-screen hidden" id="view-reading">
       <div class="chart-screen-header">
         <button class="btn btn-secondary btn-sm" id="back-to-chart-btn" type="button">
-          ‹ Quay lại Bàn Cờ Lá Số
+          ‹ Quay lại bàn cờ
         </button>
-        <span style="font-family: var(--font-serif); font-weight: 700; color: #FDE047;">
-          DỮ KIỆN LÁ SỐ
-        </span>
+        <span class="toolbar-title">Dữ kiện lá số</span>
       </div>
 
       <div class="reading-screen-wrapper" id="reading-container"></div>
     </section>
 
-    <!-- Xác nhận phương án giờ sinh -->
+    <!-- Xác nhận phương án giờ sinh (Apple Centered Sheet) -->
     <div class="modal-backdrop hidden" id="scenario-modal">
       <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="scenario-modal-title">
         <div class="modal-header">
           <div class="modal-title" id="scenario-modal-title">Xác nhận giờ sinh</div>
-          <button class="btn btn-ghost btn-sm" id="scenario-modal-close" type="button" aria-label="Đóng phần xác nhận giờ sinh">✕</button>
+          <button class="btn-icon-close" id="scenario-modal-close" type="button" aria-label="Đóng phần xác nhận giờ sinh">✕</button>
         </div>
         <div class="modal-body" id="scenario-modal-body"></div>
       </div>

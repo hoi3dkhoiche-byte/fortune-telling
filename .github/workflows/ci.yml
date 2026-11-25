@@ -4,6 +4,10 @@ on:
   push:
     branches: [master, main]
   pull_request:
+    branches: [master, main]
+
+permissions:
+  contents: read
 
 jobs:
   verify:
@@ -16,23 +20,32 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24.14.1'
+          cache: 'npm'
+          cache-dependency-path: "Việt Nam/tuvi-core/package-lock.json"
 
       - name: Install tuvi-core dependencies
-        working-directory: Việt Nam/tuvi-core
+        working-directory: "Việt Nam/tuvi-core"
         run: npm ci --ignore-scripts
 
       - name: Typecheck tuvi-core
-        working-directory: Việt Nam/tuvi-core
+        working-directory: "Việt Nam/tuvi-core"
         run: npm run typecheck
 
       - name: Verify vendor integrity
-        working-directory: Việt Nam/tuvi-core
+        working-directory: "Việt Nam/tuvi-core"
         run: npm run verify:vendor
 
       - name: Build and test tuvi-core
-        working-directory: Việt Nam/tuvi-core
+        working-directory: "Việt Nam/tuvi-core"
         run: npm test
 
+      - name: Typecheck, test, and eval tuvi-model
+        working-directory: "Việt Nam/tuvi-model"
+        run: |
+          npm run typecheck
+          npm test
+          npm run eval
+
       - name: Test tuvi-web
-        working-directory: Việt Nam/tuvi-web
+        working-directory: "Việt Nam/tuvi-web"
         run: npm test

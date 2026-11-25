@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const core = require('../../tuvi-core');
 
 const chartModule = import('../public/js/chart.js');
+/** @type {import('../../tuvi-core').BirthInput} */
 const baseBirth = {
   calendar: 'solar', date: '1990-01-06', time: '06:00', gender: 'male', tz: 'Asia/Ho_Chi_Minh',
 };
@@ -11,7 +12,10 @@ function buildResult(birth, profileId) {
   const profile = core.getProfile(profileId);
   const normalized = core.normalizeBirth(birth, profile);
   assert.equal(normalized.status, 'ok');
-  return { ...core.computeNatal(normalized.chart, profile), normalization: normalized };
+  if (normalized.status !== 'ok') throw new Error('expected ok');
+  const computed = core.computeNatal(normalized.chart, profile);
+  if (!('facts' in computed)) throw new Error('expected facts');
+  return { ...computed, normalization: /** @type {any} */ ({ ...normalized }) };
 }
 
 test('Star columns use real brightness, star type and Hóa Kỵ', async () => {

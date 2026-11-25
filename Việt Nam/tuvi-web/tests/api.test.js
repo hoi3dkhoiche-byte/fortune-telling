@@ -10,9 +10,10 @@ let testServer;
 test.before(async () => {
   await new Promise(resolve => {
     testServer = server.listen(0, '127.0.0.1', () => {
-      const port = testServer.address().port;
+      const addr = testServer.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
       baseUrl = `http://127.0.0.1:${port}`;
-      resolve();
+      resolve(undefined);
     });
   });
 });
@@ -392,5 +393,47 @@ test('POST /api/natal hỗ trợ adapter lịch Việt trên ngày lệch lịch
   assert.equal(vn.json.natal.lunarInfo.lunarDay, 1);
   assert.equal(vn.json.natal.mingGongBranch, 8);
   assert.ok(vn.json.normalization.warnings.includes('CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER'));
+});
+
+test('GET /api/corpus/stats trả đủ 16 bài giảng và 1.848 câu nguyên văn Thiên Kỷ', async () => {
+  const res = await request('/api/corpus/stats');
+  assert.equal(res.status, 200);
+  assert.equal(res.json.status, 'ok');
+  assert.equal(res.json.lectureCount, 16);
+  assert.equal(res.json.quoteCount, 1848);
+});
+
+test('POST /api/interpret chạy lớp model mock ẩn danh và kiểm định 100% khớp facts', async () => {
+  const res = await request('/api/interpret', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      birth: { ...solarBirth, date: '1990-01-01', time: '12:30' },
+      profileId: 'thienky-candidate',
+      question: 'Tổng quan Mệnh Thân và điểm cần đề phòng?',
+      mode: 'mock',
+    }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.json.status, 'ok');
+  assert.equal(res.json.adapter.kind, 'mock');
+  assert.equal(res.json.validation.valid, true);
+  assert.equal(res.json.privacy.birthDataSentToModel, false);
+  assert.ok(res.json.retrievedQuotes.length > 0);
+  assert.ok(res.json.interpretation.claims.length >= 5);
+
+  const badMode = await request('/api/interpret', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ birth: solarBirth, mode: 'remote-unapproved' }),
+  });
+  assert.equal(badMode.status, 400);
+
+  const badPayload = await request('/api/interpret', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ natalResult: { natal: { palaces: [] } } }),
+  });
+  assert.equal(badPayload.status, 400);
 });
 
