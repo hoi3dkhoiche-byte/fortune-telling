@@ -1,7 +1,14 @@
 'use strict';
 
 const core = require('../../tuvi-core');
-const { interpretNatal, loadCorpus, createMockAdapter, createOpenAICompatibleAdapter } = require('../src');
+const {
+  INTERPRETATION_SCHEMA_VERSION,
+  validateInterpretation,
+  interpretNatal,
+  loadCorpus,
+  createMockAdapter,
+  createOpenAICompatibleAdapter,
+} = require('../src');
 
 /** @type {Array<{ id: string, description: string, birth: import('../../tuvi-core').BirthInput, profileId: string, question?: string, focusPalace?: string }>} */
 const BENCHMARK_CASES = [
@@ -74,19 +81,280 @@ const BENCHMARK_CASES = [
   },
 ];
 
+/**
+ * Builds non-circular adversarial & true-negative test cases against real computed charts
+ * to measure the validator's actual recall and false-positive rate independently of MockAdapter.
+ */
+function buildAdversarialCases() {
+  const profile = core.getProfile('thienky-candidate');
+  const normBase = core.normalizeBirth(
+    { calendar: 'solar', date: '1990-01-01', time: '12:30', tz: 'Asia/Ho_Chi_Minh', gender: 'male' },
+    profile,
+  );
+  if (normBase.status !== 'ok') throw new Error('Failed to normalize baseline chart');
+  const baseNatal = /** @type {any} */ (core.computeNatal(normBase.chart, profile));
+
+  const normEmpty = core.normalizeBirth(
+    { calendar: 'solar', date: '1990-01-06', time: '06:00', tz: 'Asia/Ho_Chi_Minh', gender: 'male' },
+    profile,
+  );
+  if (normEmpty.status !== 'ok') throw new Error('Failed to normalize empty-Ming chart');
+  const emptyNatal = /** @type {any} */ (core.computeNatal(normEmpty.chart, profile));
+
+  const mingFact = baseNatal.facts.find(f => f.subjectId === 'CHART.MING' && f.predicate === 'LOCATED_AT_BRANCH');
+  const tlFact = baseNatal.facts.find(f => f.subjectId === 'STAR.TIANLIANG' && f.objectId === 'PALACE.MING');
+  const juFact = baseNatal.facts.find(f => f.predicate === 'HAS_FIVE_ELEMENTS_CLASS');
+
+  const validBase = () => ({
+    schemaVersion: INTERPRETATION_SCHEMA_VERSION,
+    summary: 'Cung Mệnh tại Mùi có Thiên Lương tọa thủ Mệnh.',
+    reasoningSteps: ['Kiểm tra cung Mệnh tại Mùi và chính tinh Thiên Lương.'],
+    claims: [
+      {
+        id: 'CLAIM.1',
+        category: 'menh-than',
+        statement: 'Thiên Lương tọa thủ Mệnh tại cung Mùi.',
+        assertions: [
+          { subjectId: mingFact.subjectId, predicate: mingFact.predicate, objectId: mingFact.objectId },
+          { subjectId: tlFact.subjectId, predicate: tlFact.predicate, objectId: tlFact.objectId },
+        ],
+        factIds: [mingFact.id, tlFact.id],
+        quoteIds: ['TK.03T.001'],
+        confidence: 'high',
+      },
+    ],
+    actionGuidance: ['Hành động thực tế, tuyệt đối không cúng sao giải hạn hay dùng bùa chú.'],
+    disclaimer: 'Tham khảo học thuật.',
+  });
+
+  const allowedQuotes = [{ id: 'TK.03T.001' }];
+
+  return [
+    // --- 12 Adversarial Positive Cases (must be caught: expectedValid = false) ---
+    {
+      id: 'adv-verb-cu-no-cung',
+      expectedValid: false,
+      expectedCode: 'STAR_PALACE_CONTRADICTION',
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => { const r = validBase(); r.summary = 'Tử Vi cư Phụ Mẫu rất sáng.'; return r; })(),
+    },
+    {
+      id: 'adv-verb-o-cung',
+      expectedValid: false,
+      expectedCode: 'STAR_PALACE_CONTRADICTION',
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => { const r = validBase(); r.summary = 'Thiên Lương ở cung Tài Bạch chủ tài lộc.'; return r; })(),
+    },
+    {
+      id: 'adv-unicode-nfd-decomposed',
+      expectedValid: false,
+      expectedCode: 'STAR_PALACE_CONTRADICTION',
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => { const r = validBase(); r.summary = 'Tử Vi tọa thủ Mệnh'.normalize('NFD'); return r; })(),
+    },
+    {
+      id: 'adv-orthography-hoa-ki',
+      expectedValid: false,
+      expectedCode: 'SIHUA_CONTRADICTION',
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => { const r = validBase(); r.summary = 'Thiên Lương hoá kị gây trở ngại.'; return r; })(),
+    },
+    {
+      id: 'adv-tam-hop-no-punctuation-bypass',
+      expectedValid: false,
+      expectedCode: 'STAR_PALACE_CONTRADICTION',
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => { const r = validBase(); r.summary = 'Xét tam hợp Mệnh Tài Quan có Tử Vi tọa thủ Mệnh rất sáng.'; return r; })(),
+    },
+    {
+      id: 'adv-fatalistic-longevity-wealth',
+      expectedValid: false,
+      expectedCode: 'UNGROUNDED_FATALISTIC_CLAIM',
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => { const r = validBase(); r.claims[0].statement = 'Thiên Lương tọa thủ Mệnh nên giàu có, sống thọ trăm tuổi.'; return r; })(),
+    },
+    {
+      id: 'adv-fake-quote-when-empty-quotes',
+      expectedValid: false,
+      expectedCode: 'UNKNOWN_QUOTE_ID',
+      natal: baseNatal,
+      quotes: [],
+      response: validBase(),
+    },
+    {
+      id: 'adv-khong-within-32chars-superstition',
+      expectedValid: false,
+      expectedCode: 'DOCTRINE_SUPERSTITION',
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => { const r = validBase(); r.actionGuidance = ['Không nên chủ quan hãy đi cúng sao giải hạn đầu năm.']; return r; })(),
+    },
+    {
+      id: 'adv-false-structured-assertion',
+      expectedValid: false,
+      expectedCode: 'ASSERTION_NOT_IN_FACTS',
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        r.claims[0].statement = 'Cung Mệnh vững vàng.';
+        r.claims[0].assertions.push({ subjectId: 'STAR.ZIWEI', predicate: 'LOCATED_IN', objectId: 'PALACE.MING' });
+        return r;
+      })(),
+    },
+    {
+      id: 'adv-extra-unreferenced-factid',
+      expectedValid: false,
+      expectedCode: 'UNREFERENCED_FACT_ID',
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        r.claims[0].factIds.push(juFact.id);
+        return r;
+      })(),
+    },
+    {
+      id: 'adv-ungrounded-star-in-statement',
+      expectedValid: false,
+      expectedCode: 'CLAIM_STATEMENT_UNGROUNDED',
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        r.claims[0].statement = 'Thiên Lương tọa thủ Mệnh kết hợp với Tham Lang mạnh mẽ.';
+        return r;
+      })(),
+    },
+    {
+      id: 'adv-aux-star-wrong-sihua',
+      expectedValid: false,
+      expectedCode: 'SIHUA_CONTRADICTION',
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => { const r = validBase(); r.summary = 'Năm sinh có Văn Xương Hóa Kỵ cần lưu ý giấy tờ.'; return r; })(),
+    },
+
+    // --- 4 True-Negative Cases (independent valid payloads that MUST pass: expectedValid = true) ---
+    {
+      id: 'tn-valid-baseline-nfc',
+      expectedValid: true,
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: validBase(),
+    },
+    {
+      id: 'tn-valid-baseline-nfd-accents',
+      expectedValid: true,
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        r.claims[0].statement = r.claims[0].statement.normalize('NFD');
+        return r;
+      })(),
+    },
+    {
+      id: 'tn-valid-anti-superstition-clause',
+      expectedValid: true,
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        r.actionGuidance = ['Chủ động rèn luyện năng lực thực tế, thay vì tin vào mê tín hay cúng bái.'];
+        return r;
+      })(),
+    },
+    {
+      id: 'tn-valid-empty-ming-borrow',
+      expectedValid: true,
+      natal: emptyNatal,
+      quotes: [],
+      response: (() => {
+        const mFact = emptyNatal.facts.find(f => f.subjectId === 'CHART.MING' && f.predicate === 'LOCATED_AT_BRANCH');
+        const eFact = emptyNatal.facts.find(f => f.subjectId === 'PALACE.MING' && f.predicate === 'HAS_NO_MAJOR_STAR');
+        const bFact = emptyNatal.facts.find(
+          f => f.subjectId === 'PALACE.MING' && f.predicate === 'BORROWS_OPPOSITE_MAJOR_STAR' && f.objectId === 'STAR.TIANLIANG',
+        );
+        return {
+          schemaVersion: INTERPRETATION_SCHEMA_VERSION,
+          summary: 'Lá số thuộc thế Mệnh vô chính diệu, mượn Thiên Lương từ đối cung Thiên Di.',
+          reasoningSteps: ['Kiểm tra cung Mệnh vô chính diệu và sao mượn đối cung.'],
+          claims: [
+            {
+              id: 'CLAIM.1',
+              category: 'menh-than',
+              statement: 'Cung Mệnh vô chính diệu, mượn chính tinh Thiên Lương ở cung Thiên Di.',
+              assertions: [
+                { subjectId: mFact.subjectId, predicate: mFact.predicate, objectId: mFact.objectId },
+                { subjectId: eFact.subjectId, predicate: eFact.predicate, value: true },
+                { subjectId: bFact.subjectId, predicate: bFact.predicate, objectId: bFact.objectId },
+              ],
+              factIds: [mFact.id, eFact.id, bFact.id],
+              quoteIds: [],
+              confidence: 'high',
+            },
+          ],
+          actionGuidance: ['Xét đồng bộ đối cung Thiên Di khi đưa ra quyết định.'],
+          disclaimer: 'Tham khảo học thuật.',
+        };
+      })(),
+    },
+  ];
+}
+
 async function runEval(options = {}) {
   const mode = options.mode || process.env.TUVI_EVAL_MODE || 'mock';
   const adapter = options.adapter || (mode === 'local' ? createOpenAICompatibleAdapter() : createMockAdapter());
   const corpus = loadCorpus();
 
+  // 1. Non-circular Adversarial & True-Negative Detector Evaluation
+  const adversarialCases = buildAdversarialCases();
+  let adversarialPositives = 0;
+  let adversarialCaught = 0;
+  let trueNegatives = 0;
+  let falsePositives = 0;
+  const adversarialDetails = [];
+
+  for (const adv of adversarialCases) {
+    const report = validateInterpretation(adv.response, adv.natal, adv.quotes);
+    if (!adv.expectedValid) {
+      adversarialPositives++;
+      const matchedCode = adv.expectedCode ? report.errors.some(e => e.code === adv.expectedCode) : !report.valid;
+      const caught = !report.valid && matchedCode;
+      if (caught) adversarialCaught++;
+      adversarialDetails.push({
+        id: adv.id,
+        passed: caught,
+        expectedCode: adv.expectedCode,
+        actualCodes: report.errors.map(e => e.code),
+      });
+    } else {
+      trueNegatives++;
+      if (!report.valid) falsePositives++;
+      adversarialDetails.push({
+        id: adv.id,
+        passed: report.valid,
+        actualCodes: report.errors.map(e => e.code),
+      });
+    }
+  }
+
+  // 2. End-to-End Pipeline Smoke & Prompt Budget Evaluation across 10 Charts
   const results = [];
-  let passedCases = 0;
+  let smokePassedCases = 0;
   let totalClaims = 0;
   let totalGroundedClaims = 0;
-  let totalContradictions = 0;
-  let totalDoctrineViolations = 0;
   let totalQuotedCases = 0;
   let privacyFailures = 0;
+  let maxPromptChars = 0;
+  let totalPromptChars = 0;
 
   for (const item of BENCHMARK_CASES) {
     const profile = core.getProfile(item.profileId);
@@ -108,54 +376,76 @@ async function runEval(options = {}) {
         extraSensitiveValues: ['Nguyễn Văn Eval'],
       });
       const v = output.validation;
-      if (v.valid) passedCases++;
+      if (v.valid && output.interpretation !== null) smokePassedCases++;
       totalClaims += v.metrics.claimCount;
       totalGroundedClaims += v.metrics.groundedClaimCount;
-      totalContradictions += v.metrics.contradictionCount;
-      totalDoctrineViolations += v.metrics.doctrineViolationCount;
       if (v.metrics.citedQuoteCount > 0) totalQuotedCases++;
+      maxPromptChars = Math.max(maxPromptChars, output.promptChars);
+      totalPromptChars += output.promptChars;
+      if (!output.privacy.directBirthIdentifiersStripped) privacyFailures++;
 
       results.push({
         id: item.id,
         valid: v.valid,
         attempts: output.attempts,
+        promptChars: output.promptChars,
         claims: v.metrics.claimCount,
+        verifiedAssertions: v.metrics.verifiedAssertionCount,
         citedFacts: v.metrics.citedFactCount,
         citedQuotes: v.metrics.citedQuoteCount,
         errors: v.errors,
       });
     } catch (error) {
-      if (String(error.message).includes('quyền riêng tư')) privacyFailures++;
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('quyền riêng tư') || (error && /** @type {any} */ (error).code === 'PRIVACY_VIOLATION')) {
+        privacyFailures++;
+      }
       results.push({
         id: item.id,
         valid: false,
-        error: error.message,
+        error: msg,
       });
     }
   }
 
+  const adversarialRecall = adversarialPositives ? Number((adversarialCaught / adversarialPositives).toFixed(4)) : 0;
+  const falsePositiveRate = trueNegatives ? Number((falsePositives / trueNegatives).toFixed(4)) : 0;
+
   const summary = {
     adapter: adapter.id,
     corpusQuotes: corpus.quotes.length,
-    totalCases: BENCHMARK_CASES.length,
-    passedCases,
-    passRate: Number((passedCases / BENCHMARK_CASES.length).toFixed(4)),
-    factGroundingRate: totalClaims ? Number((totalGroundedClaims / totalClaims).toFixed(4)) : 0,
-    hallucinationCount: totalContradictions,
-    doctrineViolationCount: totalDoctrineViolations,
+    adversarialCases: adversarialPositives,
+    adversarialCaught,
+    adversarialRecall,
+    trueNegativeCases: trueNegatives,
+    falsePositiveRate,
+    smokeTotalCases: BENCHMARK_CASES.length,
+    smokePassedCases,
+    smokePassRate: Number((smokePassedCases / BENCHMARK_CASES.length).toFixed(4)),
+    structuralAssertionRate: totalClaims ? Number((totalGroundedClaims / totalClaims).toFixed(4)) : 0,
     quoteCitationCaseRate: Number((totalQuotedCases / BENCHMARK_CASES.length).toFixed(4)),
+    avgPromptChars: Math.round(totalPromptChars / BENCHMARK_CASES.length),
+    maxPromptChars,
     privacyFailures,
   };
 
-  return { summary, results };
+  return { summary, adversarialDetails, results };
 }
 
 if (require.main === module) {
   runEval()
     .then(report => {
       console.log(JSON.stringify(report.summary, null, 2));
-      if (report.summary.passedCases !== report.summary.totalCases || report.summary.privacyFailures > 0) {
-        console.error('Eval failed cases:', JSON.stringify(report.results.filter(r => !r.valid), null, 2));
+      const failedAdv = report.adversarialDetails.filter(d => !d.passed);
+      if (
+        report.summary.adversarialRecall < 1
+        || report.summary.falsePositiveRate > 0
+        || report.summary.smokePassedCases !== report.summary.smokeTotalCases
+        || report.summary.privacyFailures > 0
+        || report.summary.maxPromptChars > 12_000
+      ) {
+        if (failedAdv.length > 0) console.error('Adversarial failures:', JSON.stringify(failedAdv, null, 2));
+        console.error('Smoke failures:', JSON.stringify(report.results.filter(r => !r.valid), null, 2));
         process.exitCode = 1;
       }
     })
@@ -167,5 +457,6 @@ if (require.main === module) {
 
 module.exports = {
   BENCHMARK_CASES,
+  buildAdversarialCases,
   runEval,
 };

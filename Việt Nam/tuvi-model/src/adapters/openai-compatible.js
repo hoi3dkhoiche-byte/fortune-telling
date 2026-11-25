@@ -1,5 +1,7 @@
 'use strict';
 
+const { ModelLayerError } = require('../schema');
+
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
 /**
@@ -55,6 +57,7 @@ function extractJsonResponse(rawText) {
  * Creates a real OpenAI-compatible chat completions adapter.
  * Defaults to local Ollama (`http://127.0.0.1:11434/v1`) and REFUSES non-loopback
  * endpoints unless `allowRemote: true` is explicitly configured.
+ * Catches JSON syntax errors cleanly (`parseError`) so the pipeline retry loop can self-correct!
  *
  * @param {{
  *   baseUrl?: string,
@@ -77,8 +80,10 @@ function createOpenAICompatibleAdapter(options = {}) {
 
   const loopback = isLoopbackUrl(baseUrl);
   if (!loopback && !allowRemote) {
-    throw new Error(
+    throw new ModelLayerError(
+      'REMOTE_ENDPOINT_BLOCKED',
       `Chặn kết nối model từ xa (${baseUrl}) vì mặc định chỉ cho phép endpoint cục bộ (localhost/127.0.0.1). Đặt allowRemote: true hoặc TUVI_LLM_ALLOW_REMOTE=1 để bật tường minh.`,
+      { baseUrl },
     );
   }
 
@@ -111,42 +116,85 @@ function createOpenAICompatibleAdapter(options = {}) {
         messages.push({
           role: 'user',
           content: [
-            'Bộ kiểm định sự thật (Fact-Checking Validator) phát hiện các lỗi sau trong JSON trước đó:',
+            'Bộ kiểm định sự thật (Fact-Checking Validator) phát hiện các lỗi sau trong phản hồi trước đó:',
             errorLines,
-            'Hãy sửa toàn bộ lỗi trên, chỉ dùng đúng `factIds` và vị trí sao có trong ngữ cảnh, và trả lại DUY NHẤT JSON chuẩn `tuvi.interpretation.v0`.',
+            'Hãy sửa toàn bộ lỗi trên, khai báo đầy đủ `assertions` và `factIds` khớp chính xác ngữ cảnh, và trả lại DUY NHẤT một JSON object hợp lệ theo chuẩn `tuvi.interpretation.v0`.',
           ].join('\n'),
         });
       }
 
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
+      let res;
       try {
         const headers = {
           'Content-Type': 'application/json',
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         };
-        const res = await fetchImpl(`${baseUrl}/chat/completions`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            model,
-            temperature,
-            response_format: { type: 'json_object' },
-            messages,
-          }),
-          signal: controller.signal,
-        });
+        try {
+          res = await fetchImpl(`${baseUrl}/chat/completions`, {
+            method: 'POST',
+            redirect: 'error',
+            headers,
+            body: JSON.stringify({
+              model,
+              temperature,
+              response_format: { type: 'json_object' },
+              messages,
+            }),
+            signal: controller.signal,
+          });
+        } catch (netErr) {
+          const msg = netErr instanceof Error ? netErr.message : String(netErr);
+          throw new ModelLayerError(
+            'ENDPOINT_UNREACHABLE',
+            `Không kết nối được tới model endpoint (${baseUrl}): ${msg}`,
+            { baseUrl },
+          );
+        }
+
         if (!res.ok) {
           const text = await res.text().catch(() => '');
-          throw new Error(`Model endpoint trả HTTP ${res.status}: ${text.slice(0, 300)}`);
+          throw new ModelLayerError(
+            'ENDPOINT_HTTP_ERROR',
+            `Model endpoint trả HTTP ${res.status}: ${text.slice(0, 300)}`,
+            { httpStatus: res.status },
+          );
         }
-        const payload = await res.json();
+
+        let payload;
+        try {
+          payload = await res.json();
+        } catch (error) {
+          if (!(error instanceof SyntaxError)) {
+            throw new ModelLayerError('ENDPOINT_UNREACHABLE', 'Không đọc được phản hồi từ model endpoint.', { baseUrl });
+          }
+          return {
+            response: null,
+            rawOutput: '',
+            parseError: 'Model endpoint trả về phản hồi HTTP không phải JSON hợp lệ.',
+          };
+        }
         const rawOutput = payload?.choices?.[0]?.message?.content;
         if (typeof rawOutput !== 'string' || !rawOutput.trim()) {
-          throw new Error('Model endpoint trả phản hồi rỗng hoặc sai định dạng OpenAI chat/completions.');
+          return {
+            response: null,
+            rawOutput: String(rawOutput ?? ''),
+            parseError: 'Model trả nội dung rỗng trong choices[0].message.content.',
+          };
         }
-        const response = extractJsonResponse(rawOutput);
-        return { response, rawOutput };
+
+        try {
+          const response = extractJsonResponse(rawOutput);
+          return { response, rawOutput };
+        } catch (syntaxErr) {
+          const msg = syntaxErr instanceof Error ? syntaxErr.message : String(syntaxErr);
+          return {
+            response: null,
+            rawOutput,
+            parseError: msg,
+          };
+        }
       } finally {
         clearTimeout(timer);
       }

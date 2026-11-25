@@ -1,5 +1,6 @@
 'use strict';
 
+const core = require('../../tuvi-core');
 const { INTERPRETATION_SCHEMA_VERSION } = require('./schema');
 const { validateInterpretation } = require('./validator');
 const { buildAnonymizedContext, assertNoBirthPii, buildPrompts } = require('./context-builder');
@@ -8,12 +9,12 @@ const { createMockAdapter } = require('./adapters/mock');
 
 /**
  * Full Compound AI interpretation pipeline:
- * 1. Build strictly anonymized chart context (zero birth date/time/location/name PII).
- * 2. Retrieve top-K verbatim Thiên Kỷ quotes from the 1,848-quote Vietnamese corpus.
- * 3. Build prompts and run the runtime PII firewall (`assertNoBirthPii`) BEFORE calling any adapter.
- * 4. Run model adapter (mock or local/remote OpenAI-compatible).
- * 5. Validate output strictly against `@tuvi/core` facts + corpus quotes + doctrine rules.
- * 6. If validation fails, retry with structured validator feedback up to `maxRetries`.
+ * 1. Recompute canonical `facts` from `natalResult.natal` so client tampering cannot bypass validation.
+ * 2. Strip direct birth PII & scan free-text `question` for dates/times/timezones.
+ * 3. Retrieve top-K verbatim Thiên Kỷ quotes from the 1,848-quote corpus.
+ * 4. Build compact profile-aware prompts (~6 KB) and audit all outbound strings via `assertNoBirthPii`.
+ * 5. Run model adapter; catch BOTH JSON syntax parse errors AND validator failures inside the retry loop.
+ * 6. Never expose an unvalidated/invalid `interpretation` (`interpretation: null` if retries exhaust).
  *
  * @param {any} natalResult
  * @param {{
@@ -29,17 +30,25 @@ const { createMockAdapter } = require('./adapters/mock');
 async function interpretNatal(natalResult, options = {}) {
   const adapter = options.adapter || createMockAdapter();
   const corpus = options.corpus || loadCorpus();
-  const topKQuotes = options.topKQuotes ?? 8;
+  const topKQuotes = options.topKQuotes ?? 4;
   const maxRetries = Math.max(0, Math.min(5, options.maxRetries ?? 2));
   const extraSensitive = options.extraSensitiveValues || [];
 
-  // 1. Build initial anonymized context (without quotes yet)
-  const baseContext = buildAnonymizedContext(natalResult, {
+  // Always recompute authoritative facts from raw `natal` for ground-truth validation
+  const canonicalFacts = core.buildFacts(natalResult.natal);
+  const trustedNatal = {
+    ...natalResult,
+    facts: canonicalFacts,
+  };
+
+  // 1. Build initial structural context (also scans `options.question` for birth PII)
+  const baseContext = buildAnonymizedContext(trustedNatal, {
     question: options.question,
     focusPalace: options.focusPalace,
+    recomputeFromNatal: true,
   });
 
-  // 2. Retrieve relevant Thiên Kỷ quotes using only the anonymized chart context + question
+  // 2. Retrieve relevant Thiên Kỷ quotes using only the stripped context + question
   const retrievedQuotes = corpus.retrieve({
     context: baseContext,
     question: options.question,
@@ -54,12 +63,12 @@ async function interpretNatal(natalResult, options = {}) {
 
   // 3. Build prompts and run strict PII firewall before ANY adapter invocation
   const { systemPrompt, userPrompt } = buildPrompts(context);
-  const baseSerialized = JSON.stringify(baseContext);
-  assertNoBirthPii(baseSerialized, natalResult, extraSensitive);
-  assertNoBirthPii(systemPrompt, natalResult, extraSensitive);
-  assertNoBirthPii(userPrompt, natalResult, extraSensitive);
+  const checkContext = assertNoBirthPii(JSON.stringify(baseContext), trustedNatal, extraSensitive);
+  const checkSystem = assertNoBirthPii(systemPrompt, trustedNatal, extraSensitive);
+  const checkUser = assertNoBirthPii(userPrompt, trustedNatal, extraSensitive);
+  const directBirthIdentifiersStripped = Boolean(checkContext.passed && checkSystem.passed && checkUser.passed);
 
-  // 4 & 5. Generate + Validate with automatic self-correction retry loop
+  // 4 & 5. Generate + Validate with automatic self-correction retry loop (covers JSON parse errors too!)
   let attempts = 0;
   /** @type {any} */
   let lastResponse = null;
@@ -77,21 +86,54 @@ async function interpretNatal(natalResult, options = {}) {
       retryFeedback: attempt > 0 ? lastValidation?.errors : undefined,
       previousRawOutput: attempt > 0 ? lastRawOutput : undefined,
     });
-    lastResponse = generated.response;
+
     lastRawOutput = generated.rawOutput;
-    lastValidation = validateInterpretation(lastResponse, natalResult, retrievedQuotes);
+
+    if (generated.parseError) {
+      lastResponse = null;
+      lastValidation = {
+        valid: false,
+        errors: [
+          {
+            code: 'JSON_PARSE_ERROR',
+            path: '$',
+            message: `Phản hồi không phải JSON hợp lệ: ${generated.parseError}`,
+          },
+        ],
+        warnings: [],
+        metrics: {
+          claimCount: 0,
+          groundedClaimCount: 0,
+          citedFactCount: 0,
+          verifiedAssertionCount: 0,
+          citedQuoteCount: 0,
+          contradictionCount: 0,
+          doctrineViolationCount: 0,
+        },
+      };
+      continue;
+    }
+
+    lastResponse = generated.response;
+    lastValidation = validateInterpretation(lastResponse, trustedNatal, retrievedQuotes);
     if (lastValidation.valid) break;
   }
+
+  const isValid = Boolean(lastValidation?.valid);
 
   return {
     schemaVersion: INTERPRETATION_SCHEMA_VERSION,
     adapter: { id: adapter.id, kind: adapter.kind },
     attempts,
-    interpretation: lastResponse,
+    promptChars: systemPrompt.length + userPrompt.length,
+    // Never return unvalidated or hallucinated claims to downstream UI callers
+    interpretation: isValid ? lastResponse : null,
     validation: lastValidation,
     retrievedQuotes,
     privacy: {
-      birthDataSentToModel: /** @type {const} */ (false),
+      directBirthIdentifiersStripped,
+      checkedPayloads: 3,
+      structuralReidentificationRisk: context.privacy.structuralReidentificationRisk,
       strippedFields: context.privacy.strippedFields,
     },
   };

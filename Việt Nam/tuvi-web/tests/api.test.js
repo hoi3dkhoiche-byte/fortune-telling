@@ -403,7 +403,7 @@ test('GET /api/corpus/stats trả đủ 16 bài giảng và 1.848 câu nguyên v
   assert.equal(res.json.quoteCount, 1848);
 });
 
-test('POST /api/interpret chạy lớp model mock ẩn danh và kiểm định 100% khớp facts', async () => {
+test('POST /api/interpret tự tính lại facts trên server, chặn file JSON chưa kiểm chứng và trả đúng HTTP 400 cho lỗi PII ở cả chế độ local', async () => {
   const res = await request('/api/interpret', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -418,9 +418,63 @@ test('POST /api/interpret chạy lớp model mock ẩn danh và kiểm định 1
   assert.equal(res.json.status, 'ok');
   assert.equal(res.json.adapter.kind, 'mock');
   assert.equal(res.json.validation.valid, true);
-  assert.equal(res.json.privacy.birthDataSentToModel, false);
+  assert.equal(res.json.privacy.directBirthIdentifiersStripped, true);
+  assert.equal(res.json.privacy.structuralReidentificationRisk, 'non-zero');
+  assert.ok(res.json.promptChars < 10_000);
   assert.ok(res.json.retrievedQuotes.length > 0);
   assert.ok(res.json.interpretation.claims.length >= 5);
+
+  // Derive chart and facts from the original birth, even when the client projection changed.
+  const sampleRes = await request('/api/sample');
+  const tamperedNatalResult = {
+    ...sampleRes.json,
+    natal: { ...sampleRes.json.natal, wuxingJu: 2, wuxingJuName: '水二局' },
+    facts: [{ id: 'TAMPERED.FACT', kind: 'chart', subjectId: 'CHART.MING', predicate: 'LOCATED_AT_BRANCH', objectId: 'BRANCH.ZI' }],
+  };
+  const recomputed = await request('/api/interpret', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ natalResult: tamperedNatalResult, mode: 'mock' }),
+  });
+  assert.equal(recomputed.status, 200);
+  assert.ok(recomputed.json.interpretation.claims.every(c => !c.factIds.includes('TAMPERED.FACT')));
+  assert.ok(recomputed.json.interpretation.claims.some(c => c.factIds.includes('CHART.JU.JU.EARTH_5')));
+  assert.ok(recomputed.json.interpretation.claims.every(c => !c.factIds.includes('CHART.JU.JU.WATER_2')));
+
+  const stale = await request('/api/interpret', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ natalResult: { ...sampleRes.json, hash: 'stale' }, mode: 'mock' }),
+  });
+  assert.equal(stale.status, 409);
+
+  const unknownProfile = await request('/api/interpret', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ natalResult: { ...sampleRes.json, profile: { id: 'unknown' } }, mode: 'mock' }),
+  });
+  assert.equal(unknownProfile.status, 400);
+
+  // Imported JSON file (unverified) must be rejected with 400
+  const importedRejected = await request('/api/interpret', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ natalResult: { ...sampleRes.json, importedFromFile: true }, mode: 'mock' }),
+  });
+  assert.equal(importedRejected.status, 400);
+
+  // Free-text PII in question under mode='local' must return 400 (NOT swallowed as 503!)
+  const piiLocal = await request('/api/interpret', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      natalResult: sampleRes.json,
+      question: 'Tôi sinh ngày 5/3/1990 lúc 6h sáng thì sao?',
+      mode: 'local',
+    }),
+  });
+  assert.equal(piiLocal.status, 400);
+  assert.match(piiLocal.json.error, /ngày\/giờ sinh|múi giờ/i);
 
   const badMode = await request('/api/interpret', {
     method: 'POST',
@@ -435,5 +489,24 @@ test('POST /api/interpret chạy lớp model mock ẩn danh và kiểm định 1
     body: JSON.stringify({ natalResult: { natal: { palaces: [] } } }),
   });
   assert.equal(badPayload.status, 400);
+});
+
+test('POST /api/interpret lập lại đúng lá số với phương án DST đã chọn', async () => {
+  const body = {
+    birth: { ...solarBirth, date: '2024-11-03', time: '01:30', tz: 'America/New_York' },
+    profileId: 'thienky-candidate',
+  };
+  const pending = await postNatal(body);
+  assert.equal(pending.status, 422);
+  const choice = pending.json.scenarioOptions[1];
+  const chart = await postNatal({ ...body, selectedScenario: choice.chart, selectedInstant: choice.instant });
+  assert.equal(chart.status, 200);
+  const result = await request('/api/interpret', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ natalResult: chart.json, mode: 'mock' }),
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.json.validation.valid, true);
 });
 

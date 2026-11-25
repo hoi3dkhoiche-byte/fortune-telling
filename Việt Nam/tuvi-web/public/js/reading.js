@@ -124,8 +124,8 @@ export function renderFactSummary(container, result) {
 }
 
 /**
- * Hiển thị khu vực chạy lớp model luận giải ẩn danh (Mock hoặc LLM cục bộ)
- * kèm kết quả kiểm định sự thật (Fact-Checking Validator) và trích dẫn bài giảng Thiên Kỷ.
+ * Hiển thị khu vực chạy lớp model kiểm định cấu trúc (Mock đối chứng hoặc LLM cục bộ)
+ * kèm danh sách lỗi kiểm định chi tiết và trích dẫn bài giảng Thiên Kỷ.
  */
 export function renderModelPanel(container, result) {
   if (!result?.natal) return;
@@ -134,11 +134,20 @@ export function renderModelPanel(container, result) {
 
   const heading = document.createElement('h2');
   heading.className = 'reading-card-title';
-  heading.textContent = 'Phân tích bằng lớp Model (Đối chiếu sự thật)';
+  heading.textContent = 'Đối chiếu dữ kiện & Lớp Model';
+
+  if (result.importedFromFile === true) {
+    const unverifiedMsg = document.createElement('div');
+    unverifiedMsg.className = 'alert-box alert-warning';
+    unverifiedMsg.textContent = 'Lá số đang xem được mở từ file JSON ngoài (chưa được máy chủ kiểm chứng lại). Để đảm bảo tính toàn vẹn dữ kiện, lớp model bị vô hiệu hóa với file nhập ngoài — hãy nhập ngày giờ sinh để lập lá số trực tiếp từ engine.';
+    card.append(heading, unverifiedMsg);
+    container.append(card);
+    return;
+  }
 
   const privacyNote = document.createElement('p');
   privacyNote.className = 'model-privacy-note';
-  privacyNote.textContent = 'Quyền riêng tư: ngày giờ sinh, múi giờ và họ tên bị loại bỏ trước khi gửi sang model; chỉ dùng cấu trúc sao/cung ẩn danh và đối chiếu tự động với dữ kiện facts của engine.';
+  privacyNote.textContent = 'Quyền riêng tư: họ tên, ngày giờ sinh dương/âm, múi giờ và tọa độ không được gửi sang model (câu hỏi chứa ngày giờ sinh cũng bị chặn). Lưu ý: tổ hợp sao, Cục và vị trí Mệnh/Thân vẫn có khả năng suy ngược khoảng thời gian sinh, nên mặc định hệ thống chỉ cho phép kết nối model cục bộ (localhost).';
 
   const controls = document.createElement('div');
   controls.className = 'model-controls';
@@ -146,7 +155,7 @@ export function renderModelPanel(container, result) {
   const questionInput = document.createElement('input');
   questionInput.type = 'text';
   questionInput.className = 'form-input';
-  questionInput.placeholder = 'Câu hỏi tập trung (tùy chọn, ví dụ: trọng tâm sự nghiệp, điểm cần đề phòng)...';
+  questionInput.placeholder = 'Chủ đề cần xem (tùy chọn, không nhập ngày giờ sinh — ví dụ: cung Quan Lộc, Tứ Hóa)...';
   questionInput.maxLength = 500;
   questionInput.setAttribute('aria-label', 'Câu hỏi phân tích lá số');
 
@@ -154,7 +163,7 @@ export function renderModelPanel(container, result) {
   modeSelect.className = 'form-select model-mode-select';
   modeSelect.setAttribute('aria-label', 'Chế độ model');
   for (const [val, label] of [
-    ['mock', 'Model giả lập cục bộ (Mock · Offline)'],
+    ['mock', 'Đối chứng cấu trúc kỹ thuật (Mock · Không suy luận AI)'],
     ['local', 'LLM cục bộ (Ollama / vLLM · localhost)'],
   ]) {
     const opt = document.createElement('option');
@@ -166,7 +175,7 @@ export function renderModelPanel(container, result) {
   const runBtn = document.createElement('button');
   runBtn.type = 'button';
   runBtn.className = 'btn btn-primary btn-sm';
-  runBtn.textContent = 'Chạy phân tích & đối chiếu';
+  runBtn.textContent = 'Chạy đối chiếu';
 
   controls.append(questionInput, modeSelect, runBtn);
 
@@ -175,7 +184,7 @@ export function renderModelPanel(container, result) {
 
   runBtn.addEventListener('click', async () => {
     runBtn.disabled = true;
-    runBtn.textContent = 'Đang phân tích…';
+    runBtn.textContent = 'Đang xử lý…';
     outputArea.replaceChildren();
     const res = await interpretNatalApi({
       natalResult: result,
@@ -183,10 +192,30 @@ export function renderModelPanel(container, result) {
       mode: modeSelect.value,
     });
     runBtn.disabled = false;
-    runBtn.textContent = 'Chạy phân tích & đối chiếu';
+    runBtn.textContent = 'Chạy đối chiếu';
     if (res.aborted) return;
 
-    if (res.httpStatus !== 200 || res.data?.status !== 'ok') {
+    if (res.httpStatus === 422 && res.data?.status === 'invalid_model_output') {
+      const warnBox = document.createElement('div');
+      warnBox.className = 'alert-box alert-warning';
+      const errCount = res.data.validation?.errors?.length || 0;
+      warnBox.textContent = `Bộ kiểm định đã chặn hiển thị phản hồi sau ${res.data.attempts || 1} lần thử do phát hiện ${errCount} lỗi không khớp dữ kiện/quy tắc:`;
+      outputArea.append(warnBox);
+
+      if (Array.isArray(res.data.validation?.errors) && res.data.validation.errors.length > 0) {
+        const errList = document.createElement('ul');
+        errList.className = 'reading-card-body model-error-list';
+        for (const issue of res.data.validation.errors) {
+          const li = document.createElement('li');
+          li.textContent = `[${issue.code}] (${issue.path}): ${issue.message}`;
+          errList.append(li);
+        }
+        outputArea.append(errList);
+      }
+      return;
+    }
+
+    if (res.httpStatus !== 200 || res.data?.status !== 'ok' || !res.data?.validation?.valid || !res.data?.interpretation) {
       const errBox = document.createElement('div');
       errBox.className = 'alert-box alert-error';
       errBox.textContent = res.data?.error || `Không chạy được lớp model (HTTP ${res.httpStatus}).`;
@@ -198,10 +227,10 @@ export function renderModelPanel(container, result) {
     const quoteMap = new Map(retrievedQuotes.map(q => [q.id, q]));
 
     const statusBar = document.createElement('div');
-    statusBar.className = `alert-box ${validation.valid ? 'model-status-ok' : 'alert-warning'}`;
-    statusBar.textContent = validation.valid
-      ? `Đã kiểm định khớp 100% dữ kiện engine (${validation.metrics.groundedClaimCount}/${validation.metrics.claimCount} nhận định · ${validation.metrics.citedFactCount} factIds · Adapter: ${adapter.id} · Không gửi ngày giờ sinh).`
-      : `Bộ kiểm định phát hiện ${validation.errors.length} lỗi cần hiệu chỉnh.`;
+    statusBar.className = 'alert-box model-status-ok';
+    statusBar.textContent = adapter?.kind === 'mock'
+      ? `Chế độ đối chứng kỹ thuật (không suy luận AI): đã kiểm tra ${validation.metrics.verifiedAssertionCount} assertions cấu trúc trên ${validation.metrics.citedFactCount} factIds (Adapter: ${adapter.id}).`
+      : `Đã vượt qua bộ kiểm định cấu trúc (${validation.metrics.groundedClaimCount}/${validation.metrics.claimCount} nhận định · ${validation.metrics.verifiedAssertionCount} assertions khớp ${validation.metrics.citedFactCount} factIds · Adapter: ${adapter.id}).`;
     outputArea.append(statusBar);
 
     if (interpretation?.summary) {

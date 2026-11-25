@@ -109,7 +109,7 @@ test('validateImportedChart chặn dữ liệu lồng sai trước khi chuyển 
   }
 });
 
-test('getBlockedScenarioGuidance chỉ dẫn mở lịch Trung hoặc báo rõ giới hạn lịch Việt', async () => {
+test('getBlockedScenarioGuidance chỉ dẫn chọn quy ước lịch khi chưa chọn và trả null khi đã chọn tường minh', async () => {
   const { getBlockedScenarioGuidance } = await import('../public/js/verification.js');
   const blockedResult = {
     audit: [{ step: 'blocked-scenarios', data: { blocked: [{ year: 1968, month: 1, day: 29, hourBranch: 0, gender: 'male' }] } }],
@@ -120,15 +120,13 @@ test('getBlockedScenarioGuidance chỉ dẫn mở lịch Trung hoặc báo rõ g
 
   const defaultGuidance = getBlockedScenarioGuidance(blockedResult, undefined);
   assert.ok(defaultGuidance);
-  assert.equal(defaultGuidance.canOpenChineseConvention, true);
+  assert.equal(defaultGuidance.canOpenConvention, true);
   assert.match(defaultGuidance.message, /Tùy chọn nâng cao/);
   assert.match(defaultGuidance.message, /Lịch Việt Nam/);
   assert.match(defaultGuidance.message, /Lịch Trung Quốc/);
 
-  const vnGuidance = getBlockedScenarioGuidance(blockedResult, 'vietnamese');
-  assert.ok(vnGuidance);
-  assert.equal(vnGuidance.canOpenChineseConvention, false);
-  assert.match(vnGuidance.message, /Lịch Việt Nam/);
+  assert.equal(getBlockedScenarioGuidance(blockedResult, 'vietnamese'), null);
+  assert.equal(getBlockedScenarioGuidance(blockedResult, 'chinese'), null);
 });
 
 test('buildVerification gắn nhãn chưa kiểm tra lại cho file mở lên và dịch bước blocked-scenarios', async () => {

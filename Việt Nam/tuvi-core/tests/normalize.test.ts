@@ -52,6 +52,24 @@ test('boundary checking can be explicitly disabled while preserving deterministi
   if (result.status === 'ok') assert.equal(result.chart.hourBranch, 1);
 });
 
+test('boundary probes outside 1900–2050 leave the supported candidate available', () => {
+  for (const [date, time, profileId, year, month, day, hourBranch] of [
+    ['1900-01-01', '00:00', 'thienky-candidate', 1900, 1, 1, 0],
+    ['2050-12-31', '22:59', 'repro-v4', 2050, 12, 31, 11],
+  ] as const) {
+    const result = normalizeBirth({ ...birth, date, time }, getProfile(profileId));
+    assert.equal(result.status, 'needs');
+    if (result.status === 'needs') {
+      assert.equal(result.reason, 'HOUR_BOUNDARY');
+      assert.deepEqual(result.scenarios, [{ year, month, day, hourBranch, gender: 'male' }]);
+    }
+  }
+  assert.throws(
+    () => normalizeBirth({ ...birth, date: '2050-12-31', time: '23:30' }, getProfile('repro-v4')),
+    /Supported calendar years/,
+  );
+});
+
 test('a boundary scenario cannot bypass an unresolved calendar divergence', () => {
   const input = { ...birth, date: '1968-01-28', time: '23:59', calendarConvention: undefined };
   const profile = getProfile('thienky-candidate');
@@ -79,6 +97,21 @@ test('a boundary scenario cannot bypass an unresolved calendar divergence', () =
     assert.deepEqual(confirmedVn.scenarios?.map(chart => chart.day), [28, 29]);
     assert.ok(confirmedVn.scenarios?.every(chart => chart.calendarConvention === 'vietnamese'));
     assert.equal(confirmedVn.audit.some(step => step.step === 'blocked-scenarios'), false);
+  }
+});
+
+test('a shifted primary date with divergent calendars leaves the preceding Hợi option available', () => {
+  const result = normalizeBirth(
+    { ...birth, date: '1968-01-28', time: '23:00', calendarConvention: undefined },
+    getProfile('repro-v4'),
+  );
+  assert.equal(result.status, 'needs');
+  if (result.status === 'needs') {
+    assert.equal(result.reason, 'HOUR_BOUNDARY');
+    assert.deepEqual(result.scenarios, [{ year: 1968, month: 1, day: 28, hourBranch: 11, gender: 'male' }]);
+    assert.deepEqual(result.audit.find(step => step.step === 'blocked-scenarios')?.data, {
+      blocked: [{ year: 1968, month: 1, day: 29, hourBranch: 0, gender: 'male' }],
+    });
   }
 });
 

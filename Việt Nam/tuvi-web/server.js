@@ -167,6 +167,45 @@ function chooseScenario(normalized, selectedScenario, selectedInstant) {
   });
 }
 
+function resolveBirthChart({ birth, profileId, selectedScenario, selectedInstant }) {
+  if (!birth || typeof birth !== 'object' || Array.isArray(birth)) {
+    throw new RequestError(400, 'Trường birth phải là một đối tượng JSON.');
+  }
+  if (typeof profileId !== 'string') throw new RequestError(400, 'Mã cấu hình phải là chuỗi.');
+  let profile;
+  try {
+    profile = core.getProfile(profileId);
+  } catch {
+    throw new RequestError(400, 'Cấu hình không hợp lệ hoặc không tồn tại.');
+  }
+
+  let normalized;
+  try {
+    normalized = core.normalizeBirth(birth, profile);
+  } catch (error) {
+    if (error instanceof RangeError || error instanceof TypeError) {
+      throw new RequestError(400, `Dữ liệu đầu vào không hợp lệ. ${error.message}`);
+    }
+    throw error;
+  }
+
+  if (selectedScenario != null || selectedInstant !== undefined) {
+    const { chart, instant, utcOffsetMinutes } = chooseScenario(normalized, selectedScenario, selectedInstant);
+    const selectionAudit = {
+      step: 'user-scenario-selection',
+      description: 'Người dùng đã xác nhận phương án giờ sinh.',
+      data: {
+        reason: normalized.reason,
+        selectedScenario: chart,
+        ...(instant === undefined ? {} : { selectedInstant: instant, utcOffsetMinutes }),
+      },
+    };
+    return chartResponse(birth, profile, chart, [...normalized.audit, selectionAudit], normalized.warnings);
+  }
+  if (normalized.status === 'needs') return { ...normalized, profile };
+  return chartResponse(birth, profile, normalized.chart, normalized.audit, normalized.warnings);
+}
+
 const server = http.createServer(async (req, res) => {
   // Keep the request pathname intact until the static path resolver checks it.
   const pathname = (req.url || '').split('?', 1)[0];
@@ -224,47 +263,8 @@ const server = http.createServer(async (req, res) => {
         throw new RequestError(400, 'Dữ liệu gửi lên phải là một đối tượng JSON.');
       }
       const { birth, profileId = 'thienky-candidate', selectedScenario, selectedInstant } = body;
-      if (!birth || typeof birth !== 'object' || Array.isArray(birth)) {
-        throw new RequestError(400, 'Trường birth phải là một đối tượng JSON.');
-      }
-      if (typeof profileId !== 'string') throw new RequestError(400, 'Mã cấu hình phải là chuỗi.');
-      let profile;
-      try {
-        profile = core.getProfile(profileId);
-      } catch {
-        throw new RequestError(400, 'Cấu hình không hợp lệ hoặc không tồn tại.');
-      }
-
-      let normalized;
-      try {
-        normalized = core.normalizeBirth(birth, profile);
-      } catch (error) {
-        if (error instanceof RangeError || error instanceof TypeError) {
-          throw new RequestError(400, `Dữ liệu đầu vào không hợp lệ. ${error.message}`);
-        }
-        throw error;
-      }
-
-      if (selectedScenario != null || selectedInstant !== undefined) {
-        const { chart, instant, utcOffsetMinutes } = chooseScenario(normalized, selectedScenario, selectedInstant);
-        const selectionAudit = {
-          step: 'user-scenario-selection',
-          description: 'Người dùng đã xác nhận kịch bản giờ sinh.',
-          data: {
-            reason: 'reason' in normalized ? normalized.reason : undefined,
-            selectedScenario: chart,
-            ...(instant === undefined ? {} : { selectedInstant: instant, utcOffsetMinutes }),
-          },
-        };
-        sendJson(res, 200, chartResponse(birth, profile, chart, [...normalized.audit, selectionAudit], normalized.warnings));
-        return;
-      }
-
-      if (normalized.status === 'needs') {
-        sendJson(res, 422, { ...normalized, profile });
-        return;
-      }
-      sendJson(res, 200, chartResponse(birth, profile, normalized.chart, normalized.audit, normalized.warnings));
+      const result = resolveBirthChart({ birth, profileId, selectedScenario, selectedInstant });
+      sendJson(res, result.status === 'needs' ? 422 : 200, result);
       return;
     }
 
@@ -308,47 +308,44 @@ const server = http.createServer(async (req, res) => {
 
       let resolvedNatal;
       if (birth !== undefined) {
-        if (!birth || typeof birth !== 'object' || Array.isArray(birth)) {
-          throw new RequestError(400, 'Trường birth phải là một đối tượng JSON.');
-        }
-        if (typeof profileId !== 'string') throw new RequestError(400, 'Mã cấu hình phải là chuỗi.');
-        let profile;
-        try {
-          profile = core.getProfile(profileId);
-        } catch {
-          throw new RequestError(400, 'Cấu hình không hợp lệ hoặc không tồn tại.');
-        }
-        let normalized;
-        try {
-          normalized = core.normalizeBirth(birth, profile);
-        } catch (error) {
-          if (error instanceof RangeError || error instanceof TypeError) {
-            throw new RequestError(400, `Dữ liệu đầu vào không hợp lệ. ${error.message}`);
-          }
-          throw error;
-        }
-        if (selectedScenario != null || selectedInstant !== undefined) {
-          const { chart } = chooseScenario(normalized, selectedScenario, selectedInstant);
-          resolvedNatal = chartResponse(birth, profile, chart, normalized.audit, normalized.warnings);
-        } else if (normalized.status === 'needs') {
-          sendJson(res, 422, { ...normalized, profile });
-          return;
-        } else {
-          resolvedNatal = chartResponse(birth, profile, normalized.chart, normalized.audit, normalized.warnings);
-        }
+        resolvedNatal = resolveBirthChart({ birth, profileId, selectedScenario, selectedInstant });
       } else if (natalResult && typeof natalResult === 'object' && !Array.isArray(natalResult)) {
-        const rawNatal = natalResult.natal;
-        if (!rawNatal || typeof rawNatal !== 'object' || !Array.isArray(rawNatal.palaces) || rawNatal.palaces.length !== 12) {
-          throw new RequestError(400, 'Trường natalResult.natal phải có đủ 12 cung hợp lệ.');
+        if (natalResult.importedFromFile === true) {
+          throw new RequestError(400, 'Không chạy lớp model trên file JSON mở ngoài chưa được máy chủ kiểm chứng lại.');
         }
-        resolvedNatal = natalResult;
+        const { input, audit } = natalResult.normalization || {};
+        if (input == null) {
+          throw new RequestError(400, 'Thiếu dữ kiện sinh gốc. Hãy lập lại lá số trước khi đối chiếu.');
+        }
+        const selection = Array.isArray(audit) ? audit.find(step => step?.step === 'user-scenario-selection')?.data : undefined;
+        resolvedNatal = resolveBirthChart({
+          birth: input,
+          profileId: natalResult.profile?.id ?? profileId,
+          selectedScenario: selection?.selectedScenario,
+          selectedInstant: selection?.selectedInstant,
+        });
+        if (resolvedNatal.status === 'ok' && natalResult.hash !== undefined && natalResult.hash !== resolvedNatal.hash) {
+          throw new RequestError(409, 'Lá số đã thay đổi kể từ khi được lập. Hãy lập lại lá số rồi chạy đối chiếu.');
+        }
       } else {
         throw new RequestError(400, 'Cần truyền trường birth hoặc natalResult để phân tích.');
       }
+      if (resolvedNatal.status === 'needs') {
+        sendJson(res, 422, resolvedNatal);
+        return;
+      }
 
-      const adapter = mode === 'local'
-        ? modelLayer.createOpenAICompatibleAdapter()
-        : modelLayer.createMockAdapter();
+      let adapter;
+      try {
+        adapter = mode === 'local'
+          ? modelLayer.createOpenAICompatibleAdapter()
+          : modelLayer.createMockAdapter();
+      } catch (err) {
+        if (err && err.code === 'REMOTE_ENDPOINT_BLOCKED') {
+          throw new RequestError(403, err.message);
+        }
+        throw err;
+      }
 
       try {
         const output = await modelLayer.interpretNatal(resolvedNatal, {
@@ -356,9 +353,19 @@ const server = http.createServer(async (req, res) => {
           question,
           focusPalace,
         });
+        if (!output.validation?.valid || !output.interpretation) {
+          sendJson(res, 422, { status: 'invalid_model_output', ...output });
+          return;
+        }
         sendJson(res, 200, { status: 'ok', ...output });
       } catch (error) {
-        if (mode === 'local') {
+        if (error && error.code === 'PRIVACY_VIOLATION') {
+          throw new RequestError(400, error.message);
+        }
+        if (error && error.code === 'REMOTE_ENDPOINT_BLOCKED') {
+          throw new RequestError(403, error.message);
+        }
+        if (error && (error.code === 'ENDPOINT_UNREACHABLE' || error.code === 'ENDPOINT_HTTP_ERROR')) {
           throw new RequestError(503, `Không kết nối được model cục bộ: ${error.message}`);
         }
         throw error;

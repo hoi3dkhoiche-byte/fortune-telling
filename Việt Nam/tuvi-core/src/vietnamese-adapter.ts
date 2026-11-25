@@ -3,7 +3,7 @@ import { Lunar, LunarMonth } from 'lunar-javascript';
 import { generateChart, getLunarInfo, type EffectiveLunarDate, type LunarMonthPolicy } from '../vendor/ziwei/algorithm';
 import { BRANCHES, STEMS } from '../vendor/ziwei/constants';
 import type { LunarInfo, ZiweiChart } from '../vendor/ziwei/types';
-import { solarToVietnamese, vietnameseMonthDayCount, type CivilDate } from './calendar';
+import { compareCalendars, solarToVietnamese, vietnameseMonthDayCount, type CivilDate } from './calendar';
 import type { ChartReady } from './types';
 
 const surrogateCache = new Map<string, CivilDate>();
@@ -124,6 +124,14 @@ export function findChineseSolarSurrogate(lunarYear: number, lunarMonth: number,
  */
 export function generateVietnameseChart(input: ChartReady, policy: LunarMonthPolicy): ZiweiChart {
   const effective = resolveEffectiveVietnameseLunarDate(input.year, input.month, input.day, policy);
+  const solar = { year: input.year, month: input.month, day: input.day };
+  const birth = { ...solar, hour: input.hourBranch, gender: input.gender };
+  // The split rule in iztro carries the raw leap day through placement, even
+  // when the next month's displayed date clamps to 29. Use that same path on
+  // shared leap dates to keep placement aligned with the upstream profile.
+  if (policy === 'split' && effective.rawLunarMonth < 0 && !compareCalendars(solar).different) {
+    return generateChart(birth, { leapMonth: policy });
+  }
   const surrogate = findChineseSolarSurrogate(effective.lunarYear, effective.lunarMonth, effective.lunarDay);
   const baseChart = generateChart(
     {
@@ -164,11 +172,7 @@ export function generateVietnameseChart(input: ChartReady, policy: LunarMonthPol
   return {
     ...baseChart,
     birthInfo: {
-      year: input.year,
-      month: input.month,
-      day: input.day,
-      hour: input.hourBranch,
-      gender: input.gender,
+      ...birth,
       leapMonthPolicy: policy,
     } as ZiweiChart['birthInfo'],
     lunarInfo,

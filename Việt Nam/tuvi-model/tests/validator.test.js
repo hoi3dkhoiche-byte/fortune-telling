@@ -27,6 +27,10 @@ function makeValidInterpretation(natal) {
         id: 'CLAIM.1',
         category: 'menh-than',
         statement: 'Thiên Lương tọa thủ Mệnh tại cung Mùi.',
+        assertions: [
+          { subjectId: mingFact.subjectId, predicate: mingFact.predicate, objectId: mingFact.objectId },
+          { subjectId: tianliangFact.subjectId, predicate: tianliangFact.predicate, objectId: tianliangFact.objectId },
+        ],
         factIds: [mingFact.id, tianliangFact.id],
         quoteIds: ['TK.03T.001'],
         confidence: 'high',
@@ -37,79 +41,123 @@ function makeValidInterpretation(natal) {
   };
 }
 
-test('validateInterpretation chấp nhận phản hồi hợp lệ khớp 100% facts và trích dẫn', () => {
+test('validateInterpretation chấp nhận phản hồi có cấu trúc assertions khớp facts và trích dẫn', () => {
   const natal = getBaselineNatal();
   const response = makeValidInterpretation(natal);
   const report = validateInterpretation(response, natal, [{ id: 'TK.03T.001' }]);
   assert.equal(report.valid, true, JSON.stringify(report.errors));
   assert.equal(report.metrics.claimCount, 1);
   assert.equal(report.metrics.groundedClaimCount, 1);
+  assert.equal(report.metrics.verifiedAssertionCount, 2);
   assert.equal(report.metrics.contradictionCount, 0);
   assert.equal(report.metrics.doctrineViolationCount, 0);
 });
 
-test('validateInterpretation chặn schema sai, factId bịa và quoteId bịa', () => {
+test('câu trực tiếp sai Mệnh, Cục hoặc khoảng tuổi đại hạn bị chặn dù assertions khớp', () => {
   const natal = getBaselineNatal();
-
-  const badSchema = validateInterpretation({ summary: 'thiếu trường' }, natal);
-  assert.equal(badSchema.valid, false);
-  assert.ok(badSchema.errors.some(e => e.code === 'SCHEMA_INVALID'));
-
-  const badFact = makeValidInterpretation(natal);
-  badFact.claims[0].factIds = ['STAR.FAKE@PALACE.MING'];
-  const badFactReport = validateInterpretation(badFact, natal, [{ id: 'TK.03T.001' }]);
-  assert.equal(badFactReport.valid, false);
-  assert.ok(badFactReport.errors.some(e => e.code === 'UNKNOWN_FACT_ID'));
-
-  const badQuote = makeValidInterpretation(natal);
-  badQuote.claims[0].quoteIds = ['TK.99X.999'];
-  const badQuoteReport = validateInterpretation(badQuote, natal, [{ id: 'TK.03T.001' }]);
-  assert.equal(badQuoteReport.valid, false);
-  assert.ok(badQuoteReport.errors.some(e => e.code === 'UNKNOWN_QUOTE_ID'));
+  const quotes = [{ id: 'TK.03T.001' }];
+  for (const [statement, code] of [
+    ['Mệnh tại Dần.', 'MING_BRANCH_CONTRADICTION'],
+    ['Cục trên lá số là Thủy Nhị Cục.', 'FIVE_ELEMENTS_CLASS_CONTRADICTION'],
+    ['Đại hạn tại Mệnh từ 20 đến 30 tuổi.', 'DECADAL_RANGE_CONTRADICTION'],
+    ['Đại hạn ở cung Mệnh 20–30 tuổi.', 'DECADAL_RANGE_CONTRADICTION'],
+  ]) {
+    const response = makeValidInterpretation(natal);
+    response.claims[0].statement = statement;
+    const report = validateInterpretation(response, natal, quotes);
+    assert.equal(report.valid, false, statement);
+    assert.ok(report.errors.some(error => error.code === code && error.path === '$.claims[0].statement'));
+  }
+  const [start, end] = natal.facts.find(f => f.predicate === 'HAS_DECADAL_AGE_RANGE' && f.subjectId === 'PALACE.MING').value;
+  const correct = makeValidInterpretation(natal);
+  correct.summary = 'Mệnh tại Mùi. Cục trên lá số là Thổ Ngũ Cục. Đại hạn ở cung Mệnh ' + start + '–' + end + ' tuổi.';
+  assert.equal(validateInterpretation(correct, natal, quotes).valid, true);
 });
 
-test('validateInterpretation phát hiện ảo giác vị trí sao, Mệnh vô chính diệu sai và Tứ Hóa sai', () => {
+test('validateInterpretation chặn thiếu assertions, assertion sai, factId thừa và quoteId bịa (kể cả khi allowedQuotes rỗng)', () => {
   const natal = getBaselineNatal();
+  const juFact = natal.facts.find(f => f.predicate === 'HAS_FIVE_ELEMENTS_CLASS');
 
-  // 1. Hallucinated major star in Mệnh (Tử Vi is NOT in Mệnh for 1990-01-01 12:30)
-  const wrongStar = makeValidInterpretation(natal);
-  wrongStar.claims[0].statement = 'Tử Vi tọa thủ Mệnh giúp quyền uy hiển hách.';
-  const wrongStarReport = validateInterpretation(wrongStar, natal, [{ id: 'TK.03T.001' }]);
-  assert.equal(wrongStarReport.valid, false);
-  assert.ok(wrongStarReport.errors.some(e => e.code === 'STAR_PALACE_CONTRADICTION'));
+  const missingAssertions = makeValidInterpretation(natal);
+  delete /** @type {any} */ (missingAssertions.claims[0]).assertions;
+  const schemaReport = validateInterpretation(missingAssertions, natal, [{ id: 'TK.03T.001' }]);
+  assert.equal(schemaReport.valid, false);
+  assert.ok(schemaReport.errors.some(e => e.code === 'SCHEMA_INVALID'));
 
-  // 2. Falsely claims Mệnh vô chính diệu when Thiên Lương sits in Mệnh
+  const wrongAssertion = makeValidInterpretation(natal);
+  wrongAssertion.claims[0].statement = 'Cung Mệnh vững vàng.';
+  wrongAssertion.claims[0].assertions.push({
+    subjectId: 'STAR.ZIWEI',
+    predicate: 'LOCATED_IN',
+    objectId: 'PALACE.MING',
+  });
+  const wrongAssertionReport = validateInterpretation(wrongAssertion, natal, [{ id: 'TK.03T.001' }]);
+  assert.equal(wrongAssertionReport.valid, false);
+  assert.ok(wrongAssertionReport.errors.some(e => e.code === 'ASSERTION_NOT_IN_FACTS'));
+
+  const extraFactId = makeValidInterpretation(natal);
+  extraFactId.claims[0].factIds.push(juFact.id);
+  const extraFactReport = validateInterpretation(extraFactId, natal, [{ id: 'TK.03T.001' }]);
+  assert.equal(extraFactReport.valid, false);
+  assert.ok(extraFactReport.errors.some(e => e.code === 'UNREFERENCED_FACT_ID'));
+
+  // Regression: quoteIds bịa khi danh sách allowedQuotes rỗng ([]) vẫn phải bị chặn
+  const fakeQuoteOnEmpty = makeValidInterpretation(natal);
+  fakeQuoteOnEmpty.claims[0].quoteIds = ['TK.99X.999'];
+  const emptyQuoteReport = validateInterpretation(fakeQuoteOnEmpty, natal, []);
+  assert.equal(emptyQuoteReport.valid, false);
+  assert.ok(emptyQuoteReport.errors.some(e => e.code === 'UNKNOWN_QUOTE_ID'));
+});
+
+test('validateInterpretation bắt trọn bộ 7 lỗ hổng lách văn bản: cư/ở cung, NFD, hoá kị, tam hợp không dấu câu, phán thọ/giàu, không trước mê tín', () => {
+  const natal = getBaselineNatal();
+  const allowed = [{ id: 'TK.03T.001' }];
+
+  // 1. "Tử Vi cư Phụ Mẫu" & "ở cung"
+  const cuVerb = makeValidInterpretation(natal);
+  cuVerb.summary = 'Tử Vi cư Phụ Mẫu mang lại uy quyền.';
+  assert.ok(validateInterpretation(cuVerb, natal, allowed).errors.some(e => e.code === 'STAR_PALACE_CONTRADICTION'));
+
+  const oCungVerb = makeValidInterpretation(natal);
+  oCungVerb.summary = 'Vũ Khúc ở cung Tài Bạch rất vượng.';
+  assert.ok(validateInterpretation(oCungVerb, natal, allowed).errors.some(e => e.code === 'STAR_PALACE_CONTRADICTION'));
+
+  // 2. Unicode NFD tách dấu
+  const nfdText = makeValidInterpretation(natal);
+  nfdText.claims[0].statement = 'Tử Vi tọa thủ Mệnh'.normalize('NFD');
+  assert.ok(validateInterpretation(nfdText, natal, allowed).errors.some(e => e.code === 'STAR_PALACE_CONTRADICTION'));
+
+  // 3. Chính tả "Hóa Kị" và "hoá kỵ"
+  const hoaKi = makeValidInterpretation(natal);
+  hoaKi.summary = 'Thiên Lương Hóa Kị cần đề phòng.';
+  assert.ok(validateInterpretation(hoaKi, natal, allowed).errors.some(e => e.code === 'SIHUA_CONTRADICTION'));
+
+  const hoaKyTone = makeValidInterpretation(natal);
+  hoaKyTone.summary = 'Thiên Lương hoá kỵ cần đề phòng.';
+  assert.ok(validateInterpretation(hoaKyTone, natal, allowed).errors.some(e => e.code === 'SIHUA_CONTRADICTION'));
+
+  // 4. Đi sau "tam hợp" không có dấu câu ngăn
+  const tamHopBypass = makeValidInterpretation(natal);
+  tamHopBypass.summary = 'Xét tam hợp Mệnh Tài Quan có Tử Vi tọa thủ Mệnh rất sáng.';
+  assert.ok(validateInterpretation(tamHopBypass, natal, allowed).errors.some(e => e.code === 'STAR_PALACE_CONTRADICTION'));
+
+  // 5. Câu định mệnh "giàu có, sống thọ trăm tuổi" gắn một factId hợp lệ
+  const fatalistic = makeValidInterpretation(natal);
+  fatalistic.claims[0].statement = 'Thiên Lương tọa thủ Mệnh nên giàu có, sống thọ trăm tuổi.';
+  assert.ok(validateInterpretation(fatalistic, natal, allowed).errors.some(e => e.code === 'UNGROUNDED_FATALISTIC_CLAIM'));
+
+  // 6. Câu mê tín có chữ "không" đứng trước trong vòng 32 ký tự
+  const superstitionBypass = makeValidInterpretation(natal);
+  superstitionBypass.actionGuidance = ['Không nên chủ quan hãy đi cúng sao giải hạn đầu năm.'];
+  assert.ok(validateInterpretation(superstitionBypass, natal, allowed).errors.some(e => e.code === 'DOCTRINE_SUPERSTITION'));
+
+  // 7. Mệnh vô chính diệu sai & câu bài trừ mê tín hợp lệ
   const wrongEmpty = makeValidInterpretation(natal);
-  wrongEmpty.claims[0].statement = 'Lá số này thuộc thế Mệnh vô chính diệu.';
-  const wrongEmptyReport = validateInterpretation(wrongEmpty, natal, [{ id: 'TK.03T.001' }]);
-  assert.equal(wrongEmptyReport.valid, false);
-  assert.ok(wrongEmptyReport.errors.some(e => e.code === 'EMPTY_MING_CONTRADICTION'));
-
-  // 3. Falsely claims Tử Vi Hóa Kỵ (for Kỷ year, Văn Khúc Hóa Kỵ, NOT Tử Vi!)
-  const wrongSiHua = makeValidInterpretation(natal);
-  wrongSiHua.claims[0].statement = 'Trong lá số có Tử Vi Hóa Kỵ gây trắc trở.';
-  const wrongSiHuaReport = validateInterpretation(wrongSiHua, natal, [{ id: 'TK.03T.001' }]);
-  assert.equal(wrongSiHuaReport.valid, false);
-  assert.ok(wrongSiHuaReport.errors.some(e => e.code === 'SIHUA_CONTRADICTION'));
-
-  // 4. Borrowing / aspect mention must NOT trigger false-positive placement contradiction
-  const borrowingOk = makeValidInterpretation(natal);
-  borrowingOk.claims[0].statement = 'Cung Thiên Di không có chính tinh nên mượn Thiên Lương tọa thủ Mệnh từ đối cung chiếu về.';
-  const borrowingReport = validateInterpretation(borrowingOk, natal, [{ id: 'TK.03T.001' }]);
-  assert.equal(borrowingReport.valid, true, JSON.stringify(borrowingReport.errors));
-});
-
-test('validateInterpretation chặn khuyến nghị mê tín/cúng bái nhưng cho phép câu bài trừ mê tín', () => {
-  const natal = getBaselineNatal();
-
-  const superstitious = makeValidInterpretation(natal);
-  superstitious.actionGuidance.push('Nên đi cúng sao giải hạn và mua bùa bình an đầu năm.');
-  const badReport = validateInterpretation(superstitious, natal, [{ id: 'TK.03T.001' }]);
-  assert.equal(badReport.valid, false);
-  assert.ok(badReport.errors.some(e => e.code === 'DOCTRINE_SUPERSTITION'));
+  wrongEmpty.summary = 'Lá số này thuộc thế Mệnh vô chính diệu.';
+  assert.ok(validateInterpretation(wrongEmpty, natal, allowed).errors.some(e => e.code === 'EMPTY_MING_CONTRADICTION'));
 
   const rational = makeValidInterpretation(natal);
-  rational.actionGuidance = ['Tuyệt đối không cúng sao giải hạn, không dùng bùa chú; hãy cải vận bằng hành vi thực tế.'];
-  const okReport = validateInterpretation(rational, natal, [{ id: 'TK.03T.001' }]);
+  rational.actionGuidance = ['Tuyệt đối không cúng sao giải hạn, không dùng bùa chú; cải vận bằng hành động thực tế.'];
+  const okReport = validateInterpretation(rational, natal, allowed);
   assert.equal(okReport.valid, true, JSON.stringify(okReport.errors));
 });

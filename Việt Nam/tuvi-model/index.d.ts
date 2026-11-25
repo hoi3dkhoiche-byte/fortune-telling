@@ -9,10 +9,32 @@ export type ClaimCategory =
 
 export type ClaimConfidence = 'high' | 'medium' | 'low';
 
+export type AssertionPredicate =
+  | 'LOCATED_AT_BRANCH'
+  | 'LOCATED_IN'
+  | 'HAS_FIVE_ELEMENTS_CLASS'
+  | 'IS_STAR'
+  | 'HAS_NO_MAJOR_STAR'
+  | 'HAS_NATAL_TRANSFORMATION'
+  | 'HAS_BRIGHTNESS_AT_PALACE'
+  | 'BORROWS_OPPOSITE_MAJOR_STAR'
+  | 'OPPOSITE_TO'
+  | 'TRINE_WITH'
+  | 'HAS_SANFANGSIZHENG_MEMBER'
+  | 'HAS_DECADAL_AGE_RANGE';
+
+export interface ClaimAssertion {
+  subjectId: string;
+  predicate: AssertionPredicate;
+  objectId?: string;
+  value?: string | number | boolean | number[];
+}
+
 export interface InterpretationClaim {
   id: string;
   category: ClaimCategory;
   statement: string;
+  assertions: ClaimAssertion[];
   factIds: string[];
   quoteIds?: string[];
   confidence: ClaimConfidence;
@@ -27,15 +49,22 @@ export interface InterpretationResponse {
   disclaimer: string;
 }
 
+export type ValidationIssueCode =
+  | 'SCHEMA_INVALID'
+  | 'JSON_PARSE_ERROR'
+  | 'UNKNOWN_FACT_ID'
+  | 'ASSERTION_NOT_IN_FACTS'
+  | 'UNREFERENCED_FACT_ID'
+  | 'CLAIM_STATEMENT_UNGROUNDED'
+  | 'UNKNOWN_QUOTE_ID'
+  | 'STAR_PALACE_CONTRADICTION'
+  | 'EMPTY_MING_CONTRADICTION'
+  | 'SIHUA_CONTRADICTION'
+  | 'UNGROUNDED_FATALISTIC_CLAIM'
+  | 'DOCTRINE_SUPERSTITION';
+
 export interface ValidationIssue {
-  code:
-    | 'SCHEMA_INVALID'
-    | 'UNKNOWN_FACT_ID'
-    | 'UNKNOWN_QUOTE_ID'
-    | 'STAR_PALACE_CONTRADICTION'
-    | 'EMPTY_MING_CONTRADICTION'
-    | 'SIHUA_CONTRADICTION'
-    | 'DOCTRINE_SUPERSTITION';
+  code: ValidationIssueCode;
   path: string;
   message: string;
 }
@@ -48,10 +77,24 @@ export interface ValidationReport {
     claimCount: number;
     groundedClaimCount: number;
     citedFactCount: number;
+    verifiedAssertionCount: number;
     citedQuoteCount: number;
     contradictionCount: number;
     doctrineViolationCount: number;
   };
+}
+
+export type ModelErrorCode =
+  | 'PRIVACY_VIOLATION'
+  | 'REMOTE_ENDPOINT_BLOCKED'
+  | 'ENDPOINT_UNREACHABLE'
+  | 'ENDPOINT_HTTP_ERROR'
+  | 'INVALID_INPUT';
+
+export declare class ModelLayerError extends Error {
+  code: ModelErrorCode;
+  details?: Record<string, unknown>;
+  constructor(code: ModelErrorCode, message: string, details?: Record<string, unknown>);
 }
 
 export interface CorpusQuote {
@@ -76,6 +119,7 @@ export interface AnonymizedContext {
   privacy: {
     birthDataStripped: true;
     strippedFields: string[];
+    structuralReidentificationRisk: 'non-zero';
   };
   profile: {
     id: string;
@@ -84,6 +128,7 @@ export interface AnonymizedContext {
     leapMonth: string;
     lateZi: string;
   };
+  warnings: string[];
   chartSummary: {
     yinYangGender: string;
     wuxingJu: number;
@@ -98,8 +143,11 @@ export interface AnonymizedContext {
     mingZhuLabelVi: string;
     shenZhuLabelVi: string;
     siHua: Array<{
+      transformationId: string;
       transformation: string;
+      starId: string;
       starNameVi: string;
+      palaceId: string;
       palaceNameVi: string;
       factId: string;
     }>;
@@ -113,11 +161,19 @@ export interface AnonymizedContext {
     isShen: boolean;
     isEmpty: boolean;
     daXianAge: [number, number] | null;
-    majorStars: Array<{ nameVi: string; brightnessVi: string; siHuaVi: string }>;
-    otherStars: Array<{ nameVi: string; type: string; brightnessVi: string; siHuaVi: string }>;
+    majorStars: Array<{ id: string; nameVi: string; brightnessVi: string; siHuaVi: string }>;
+    otherStars: Array<{ id: string; nameVi: string; type: string; brightnessVi: string; siHuaVi: string }>;
     borrowedStarsVi: string[];
   }>;
   facts: Array<{
+    id: string;
+    kind: string;
+    subjectId: string;
+    predicate: string;
+    objectId?: string;
+    value?: unknown;
+  }>;
+  promptFacts: Array<{
     id: string;
     kind: string;
     subjectId: string;
@@ -140,16 +196,18 @@ export interface ModelAdapter {
     userPrompt: string;
     retryFeedback?: ValidationIssue[];
     previousRawOutput?: string;
-  }): Promise<{ response: InterpretationResponse; rawOutput: string }>;
+  }): Promise<{ response: InterpretationResponse | null; rawOutput: string; parseError?: string }>;
 }
 
 export const INTERPRETATION_SCHEMA_VERSION: 'tuvi.interpretation.v0';
 export const CLAIM_CATEGORIES: readonly ClaimCategory[];
+export const ASSERTION_PREDICATES: readonly AssertionPredicate[];
+export function canonicalizeVi(raw: string): string;
 export function validateInterpretationSchema(value: unknown): ValidationIssue[];
 export function validateInterpretation(
   response: unknown,
   natalResult: any,
-  allowedQuotes?: CorpusQuote[],
+  allowedQuotes?: Array<{ id: string }>,
 ): ValidationReport;
 export function loadCorpus(docsDir?: string): {
   quotes: CorpusQuote[];
@@ -162,19 +220,25 @@ export function loadCorpus(docsDir?: string): {
   }): RetrievedQuote[];
   getById(id: string): CorpusQuote | undefined;
 };
+export function scanQuestionForBirthPii(question: string | null | undefined): void;
 export function buildAnonymizedContext(
   natalResult: any,
   options?: {
     question?: string;
     focusPalace?: string;
     retrievedQuotes?: RetrievedQuote[];
+    recomputeFromNatal?: boolean;
   },
 ): AnonymizedContext;
 export function assertNoBirthPii(
   serializedText: string,
   natalResult: any,
   extraSensitiveValues?: string[],
-): void;
+): { passed: true; checkedLength: number };
+export function buildPrompts(context: AnonymizedContext): {
+  systemPrompt: string;
+  userPrompt: string;
+};
 export function createMockAdapter(): ModelAdapter;
 export function createOpenAICompatibleAdapter(options?: {
   baseUrl?: string;
@@ -200,11 +264,14 @@ export function interpretNatal(
   schemaVersion: 'tuvi.interpretation.v0';
   adapter: { id: string; kind: string };
   attempts: number;
-  interpretation: InterpretationResponse;
+  promptChars: number;
+  interpretation: InterpretationResponse | null;
   validation: ValidationReport;
   retrievedQuotes: RetrievedQuote[];
   privacy: {
-    birthDataSentToModel: false;
+    directBirthIdentifiersStripped: boolean;
+    checkedPayloads: number;
+    structuralReidentificationRisk: 'non-zero';
     strippedFields: string[];
   };
 }>;

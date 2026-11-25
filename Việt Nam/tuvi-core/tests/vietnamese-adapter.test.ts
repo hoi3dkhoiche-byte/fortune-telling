@@ -109,6 +109,18 @@ test('Vietnamese adapter matches upstream Chinese placement on non-divergent dat
   assert.notEqual(vn.hash, cn.hash);
 });
 
+test('Vietnamese split keeps upstream placement on a shared leap day 30', () => {
+  const profile = getProfile('repro-v4');
+  const date = { year: 2017, month: 8, day: 21 };
+  assert.deepEqual(solarToVietnamese(date), { year: 2017, month: 6, day: 30, isLeap: true });
+  const input = { ...date, hourBranch: 6, gender: 'male' } as const;
+  const cn = computeNatal(input, profile);
+  const vn = computeNatal({ ...input, calendarConvention: 'vietnamese' }, profile);
+  assert.equal(cn.natal.ziweiPos, 11);
+  assert.deepEqual(vn.natal, cn.natal);
+  assert.equal(vn.provenance.calendar, 'vietnamese-astronomical-utc+7');
+});
+
 test('lunar-javascript and iztro lunar-lite agree on every day from 1900 to 2050', () => {
   const iztroRequire = createRequire(require.resolve('iztro'));
   const { solar2lunar } = iztroRequire('lunar-lite') as {

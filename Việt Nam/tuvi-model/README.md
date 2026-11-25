@@ -1,38 +1,27 @@
-# @tuvi/model — Lớp Model Luận Giải Tử Vi Thiên Kỷ
+# @tuvi/model
 
-Package không phụ thuộc runtime ngoài, triển khai kiến trúc tách đôi **code lập lá số (`@tuvi/core`) — model chỉ luận giải (`@tuvi/model`)** với 6 thành phần đầy đủ:
+Lớp model kiểm định sự thật (Fact-Checking) và truy xuất bài giảng Thiên Kỷ cho hệ thống Tử Vi Đẩu Số, tách rời hoàn toàn khỏi lõi tính toán xác định `@tuvi/core`.
 
-1. **Claim Schema (`src/schema.js`):** Định nghĩa chuẩn `tuvi.interpretation.v0` bắt buộc mỗi nhận định (`claim`) phải gắn ít nhất 1 `factId` có thật từ `@tuvi/core`.
-2. **Fact-Checking Validator (`src/validator.js`):** Kiểm định 5 lớp:
-   - Cấu trúc schema `tuvi.interpretation.v0`
-   - Tồn tại `factIds` trong `result.facts`
-   - Tồn tại `quoteIds` trong trích dẫn RAG
-   - Phát hiện ảo giác trực tiếp trong văn bản tiếng Việt (đặt nhầm chính tinh vào cung, sai trạng thái Mệnh vô chính diệu, sai Tứ Hóa)
-   - Ràng buộc đạo lý Thiên Kỷ (chặn khuyến nghị cúng sao giải hạn, mua bùa chú, mê tín).
-3. **Anonymized Context Builder & PII Firewall (`src/context-builder.js`):**
-   - Loại bỏ triệt để `birthInfo`, `lunarInfo`, `normalization`, `userName`, `place` (lat/lon), `tz`, `hash` khỏi ngữ cảnh gửi sang model.
-   - Chạy tường lửa `assertNoBirthPii()` trước mọi lời gọi adapter; chặn ngay nếu phát hiện dữ kiện sinh xuất hiện trong prompt.
-4. **RAG trên kho 1.848 câu giảng (`src/rag.js`):**
-   - Nạp toàn bộ **16 file bài giảng** (`Việt Nam/docs tiếng việt/Bài *.md`) gồm đúng **1.848 câu nguyên văn** kèm mốc thời gian và link Bilibili gốc.
-   - Truy xuất theo BM25 kết hợp trọng số thẻ chuyên môn (`<sub>...</sub>`) và tổ hợp sao/cung/Tứ Hóa của lá số.
-5. **Model Adapters (`src/adapters/mock.js`, `src/adapters/openai-compatible.js`, `src/pipeline.js`):**
-   - `MockModelAdapter`: chạy 100% offline, tất định, neo vào `facts` và trích dẫn bài giảng thật.
-   - `OpenAICompatibleAdapter`: kết nối mặc định tới model cục bộ (**Ollama / vLLM / LM Studio** tại `http://127.0.0.1:11434/v1`). Từ chối mọi endpoint từ xa trừ khi bật tường minh `allowRemote: true` (hoặc `TUVI_LLM_ALLOW_REMOTE=1`), kèm vòng tự sửa lỗi (retry) khi Validator phát hiện sai lệch.
-6. **Bộ Eval (`eval/run-eval.js`):** Đánh giá tự động trên 10 lá số đa dạng (Mệnh thường, Vô chính diệu mượn sao, tháng nhuận, Tý muộn, lịch Việt `1968-01-29`, lịch Trung...) về độ phủ `factId`, tỷ lệ ảo giác, tỷ lệ trích dẫn, tuân thủ giáo lý và quyền riêng tư.
+## Kiến trúc chính
 
-## Chạy kiểm tra & Eval
+1. **Claim có cấu trúc (`src/schema.js`, `src/validator.js`)**
+   - Mỗi nhận định trong `claims[]` bắt buộc khai báo cả `factIds` lẫn mảng `assertions` dạng `{ subjectId, predicate, objectId?, value? }`.
+   - Bộ kiểm định đối chiếu từng `assertion` trực tiếp với `facts` do `@tuvi/core` tính lại từ `natal`, từ chối mọi `factId` gắn thừa không có `assertion`, từ chối `quoteId` ngoài danh sách `retrievedQuotes` (kể cả khi danh sách rỗng).
+   - Chuẩn hóa Unicode `NFC` và chính tả tiếng Việt (`hoá/hóa`, `kị/kỵ`, `toạ/tọa`) trước khi quét mâu thuẫn vị trí sao–cung, Tứ Hóa, trạng thái Mệnh vô chính diệu, câu phán đoán định mệnh vô căn cứ và khuyến nghị mê tín/cúng bái.
+2. **Quyền riêng tư & Thu gọn ngữ cảnh (`src/context-builder.js`)**
+   - Gỡ toàn bộ định danh sinh trực tiếp (`birthInfo`, `lunarInfo`, `normalization.input/chart/audit`, `tz`, `place`, `userName`) và quét chặn ngày giờ sinh tự do trong `question` (ví dụ `5/3/1990`, `lúc 6h sáng`).
+   - **Giới hạn trung thực**: tổ hợp cấu trúc sao, Ngũ Hành Cục, Âm/Dương Nam/Nữ và vị trí Mệnh/Thân vẫn có khả năng thu hẹp khoảng thời gian sinh (`structuralReidentificationRisk: 'non-zero'`). Vì vậy mặc định adapter chỉ cho phép kết nối loopback cục bộ (`localhost` / `127.0.0.1`).
+   - Tự động chọn lọc `promptFacts` theo cung trọng tâm (Mệnh, Thân, Phúc Đức, Tứ Hóa, `focusPalace` và tam phương tứ chính) kèm thông tin `profile` (`status`, `brightnessSchool`) và `warnings`, giữ kích thước prompt khoảng `5–8 KB` để không bị cắt trên LLM cục bộ.
+3. **Kho trích dẫn RAG Thiên Kỷ (`src/rag.js`)**
+   - Đánh chỉ mục BM25 toàn bộ **16 bài giảng** (**1.848 câu nguyên văn** có mã `TK.*` duy nhất và mốc thời gian).
+4. **Đường ống tự sửa lỗi & Đánh giá không tuần hoàn (`src/pipeline.js`, `eval/run-eval.js`)**
+   - Vòng retry bao phủ cả lỗi cú pháp JSON (`JSON_PARSE_ERROR`) lẫn lỗi kiểm định sự thật. Khi hết lượt thử mà chưa hợp lệ, `interpretation` trả về `null` (không bao giờ phát tán nhận định sai ra giao diện).
+   - `npm run eval` chạy cả bài kiểm tra đường ống lẫn **bộ đối kháng không tuần hoàn (`ADVERSARIAL_CASES`)** để đo `adversarialRecall` và `falsePositiveRate` thực tế của Validator.
+
+## Lệnh chạy
 
 ```powershell
-cd "Việt Nam/tuvi-model"
-npm.cmd run typecheck
-npm.cmd test
-npm.cmd run eval
-```
-
-## Cấu hình chạy model cục bộ (Ollama / vLLM)
-
-```powershell
-$env:TUVI_MODEL_MODE = "local"
-$env:TUVI_LLM_BASE_URL = "http://127.0.0.1:11434/v1"
-$env:TUVI_LLM_MODEL = "qwen2.5:14b-instruct"
+npm run typecheck
+npm test
+npm run eval
 ```

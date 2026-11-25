@@ -11,6 +11,34 @@ const CLAIM_CATEGORIES = Object.freeze([
   'cai-van',
 ]);
 const CLAIM_CONFIDENCES = Object.freeze(['high', 'medium', 'low']);
+const ASSERTION_PREDICATES = Object.freeze([
+  'LOCATED_AT_BRANCH',
+  'LOCATED_IN',
+  'HAS_FIVE_ELEMENTS_CLASS',
+  'IS_STAR',
+  'HAS_NO_MAJOR_STAR',
+  'HAS_NATAL_TRANSFORMATION',
+  'HAS_BRIGHTNESS_AT_PALACE',
+  'BORROWS_OPPOSITE_MAJOR_STAR',
+  'OPPOSITE_TO',
+  'TRINE_WITH',
+  'HAS_SANFANGSIZHENG_MEMBER',
+  'HAS_DECADAL_AGE_RANGE',
+]);
+
+class ModelLayerError extends Error {
+  /**
+   * @param {'PRIVACY_VIOLATION' | 'REMOTE_ENDPOINT_BLOCKED' | 'ENDPOINT_UNREACHABLE' | 'ENDPOINT_HTTP_ERROR' | 'INVALID_INPUT'} code
+   * @param {string} message
+   * @param {Record<string, unknown>} [details]
+   */
+  constructor(code, message, details = undefined) {
+    super(message);
+    this.name = 'ModelLayerError';
+    this.code = code;
+    this.details = details;
+  }
+}
 
 /**
  * @param {unknown} value
@@ -25,11 +53,23 @@ function isRecord(value) {
  * @returns {value is string}
  */
 function isNonEmptyString(value) {
-  return typeof value === 'string' && value.trim().length > 0;
+  return typeof value === 'string' && value.normalize('NFC').trim().length > 0;
 }
 
 /**
- * Validates structural compliance with `tuvi.interpretation.v0`.
+ * @param {unknown} val
+ * @returns {boolean}
+ */
+function isValidAssertionValue(val) {
+  if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') return true;
+  if (Array.isArray(val) && val.length > 0 && val.every(item => typeof item === 'number')) return true;
+  return false;
+}
+
+/**
+ * Validates structural compliance with `tuvi.interpretation.v0` including
+ * machine-checkable `assertions[{ subjectId, predicate, objectId?, value? }]`.
+ *
  * @param {unknown} value
  * @returns {Array<{ code: string, path: string, message: string }>}
  */
@@ -58,7 +98,7 @@ function validateInterpretationSchema(value) {
     fail('$.disclaimer', 'disclaimer phải là chuỗi không rỗng.');
   }
   if (!Array.isArray(value.claims) || value.claims.length === 0) {
-    fail('$.claims', 'claims phải có ít nhất 1 nhận định gắn factId.');
+    fail('$.claims', 'claims phải có ít nhất 1 nhận định có cấu trúc.');
     return errors;
   }
 
@@ -88,6 +128,34 @@ function validateInterpretationSchema(value) {
     if (!Array.isArray(claim.factIds) || claim.factIds.length === 0 || !claim.factIds.every(isNonEmptyString)) {
       fail(`${base}.factIds`, 'Mỗi claim bắt buộc phải gắn ít nhất 1 factId hợp lệ.');
     }
+    if (!Array.isArray(claim.assertions) || claim.assertions.length === 0) {
+      fail(`${base}.assertions`, 'Mỗi claim bắt buộc phải có mảng assertions (subjectId, predicate, objectId/value) không rỗng để đối chiếu trực tiếp với facts.');
+    } else {
+      claim.assertions.forEach((assertion, aIdx) => {
+        const aPath = `${base}.assertions[${aIdx}]`;
+        if (!isRecord(assertion)) {
+          fail(aPath, 'Mỗi assertion phải là một object.');
+          return;
+        }
+        if (!isNonEmptyString(assertion.subjectId)) {
+          fail(`${aPath}.subjectId`, 'assertion.subjectId phải là chuỗi mã thực thể không rỗng.');
+        }
+        if (!ASSERTION_PREDICATES.includes(assertion.predicate)) {
+          fail(`${aPath}.predicate`, `assertion.predicate phải thuộc [${ASSERTION_PREDICATES.join(', ')}].`);
+        }
+        const hasObj = assertion.objectId !== undefined;
+        const hasVal = assertion.value !== undefined;
+        if (!hasObj && !hasVal) {
+          fail(aPath, 'assertion phải có ít nhất objectId hoặc value.');
+        }
+        if (hasObj && !isNonEmptyString(assertion.objectId)) {
+          fail(`${aPath}.objectId`, 'assertion.objectId phải là chuỗi không rỗng.');
+        }
+        if (hasVal && !isValidAssertionValue(assertion.value)) {
+          fail(`${aPath}.value`, 'assertion.value phải là string, number, boolean hoặc mảng số.');
+        }
+      });
+    }
     if (claim.quoteIds !== undefined && (!Array.isArray(claim.quoteIds) || !claim.quoteIds.every(isNonEmptyString))) {
       fail(`${base}.quoteIds`, 'quoteIds (nếu có) phải là mảng các mã trích dẫn không rỗng.');
     }
@@ -100,5 +168,7 @@ module.exports = {
   INTERPRETATION_SCHEMA_VERSION,
   CLAIM_CATEGORIES,
   CLAIM_CONFIDENCES,
+  ASSERTION_PREDICATES,
+  ModelLayerError,
   validateInterpretationSchema,
 };

@@ -1,7 +1,7 @@
 import type { AuditStep, BirthInput, ChartReady, NormalizationResult, Profile } from './types';
 import { validateProfile } from './profiles';
 import {
-  addDays, assertYear, chineseToSolar, compareCalendars, formatDate, parseDate,
+  addDays, assertYear, CALENDAR_YEAR_MAX, CALENDAR_YEAR_MIN, chineseToSolar, compareCalendars, formatDate, parseDate,
   vietnameseToSolar, type CivilDate, type LunarDate,
 } from './calendar';
 import { resolveLocalTime, validateTimeZone, type TimeZoneCandidate } from './timezone';
@@ -11,6 +11,7 @@ const DAY_SECONDS = 86400;
 const mod = (value: number, divisor: number) => ((value % divisor) + divisor) % divisor;
 const key = (chart: ChartReady) => `${chart.year}-${chart.month}-${chart.day}-${chart.hourBranch}-${chart.gender}-${chart.calendarConvention ?? ''}`;
 const uniqueCharts = (charts: ChartReady[]) => [...new Map(charts.map(chart => [key(chart), chart])).values()];
+const withinCalendarRange = (chart: ChartReady) => chart.year >= CALENDAR_YEAR_MIN && chart.year <= CALENDAR_YEAR_MAX;
 
 function validateInput(value: unknown): asserts value is BirthInput {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('Birth input must be an object.');
@@ -47,7 +48,6 @@ function chartAt(date: CivilDate, rawSeconds: number, gender: BirthInput['gender
   const hourBranch = seconds >= 23 * 3600 || seconds < 3600 ? 0 : Math.floor((seconds - 3600) / 7200) + 1;
   const ziOffset = profile.lateZi === 'next-day' && seconds >= 23 * 3600 ? 1 : 0;
   const shifted = addDays(date, dayOffset + ziOffset);
-  assertYear(shifted.year);
   return calendarConvention === 'vietnamese'
     ? { ...shifted, hourBranch, gender, calendarConvention: 'vietnamese' }
     : { ...shifted, hourBranch, gender };
@@ -146,7 +146,9 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
       ...candidate,
       chart: chartAt(date, timeCorrection(date, hour, minute, input, profile, candidate).seconds, input.gender, profile, input.calendarConvention),
     }));
-    const { selectable: scenarioOptions, blocked } = partitionScenarios(allOptions, option => option.chart);
+    const inRange = allOptions.filter(option => withinCalendarRange(option.chart));
+    if (inRange.length === 0) assertYear(allOptions[0].chart.year);
+    const { selectable: scenarioOptions, blocked } = partitionScenarios(inRange, option => option.chart);
     if (blocked.length > 0) {
       audit.push({ step: 'blocked-scenarios', description: 'Scenarios blocked by calendar divergence filter.', data: { blocked } });
     }
@@ -163,6 +165,7 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
   const candidate = zone.candidates[0];
   const correction = timeCorrection(date, hour, minute, input, profile, candidate);
   const chart = chartAt(date, correction.seconds, input.gender, profile, input.calendarConvention);
+  assertYear(chart.year);
   const uncorrectedChart = chartAt(date, hour * 3600 + minute * 60, input.gender, profile, input.calendarConvention);
   audit.push({
     step: 'solar-time', description: 'Applied only the profile-selected correction; seconds are rounded once before branch/day selection.',
@@ -170,13 +173,11 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
   });
   audit.push({ step: 'chart-ready', description: 'Applied the late-Zi rule to the selected clock; hourBranch is 0–11.', data: { chart, lateZi: profile.lateZi } });
 
+  let shiftedDateNeedsCalendar = false;
   if (formatDate(chart) !== formatDate(date)) {
     const shiftedComparison = compareCalendars(chart);
     audit.push({ step: 'shifted-calendar-comparison', description: 'Checked the engine date after solar-time/late-Zi day movement.', data: { ...shiftedComparison } });
-    if (shiftedComparison.different && !input.calendarConvention) {
-      warnings.push('SHIFTED_DATE_DIVERGENCE');
-      return needs('CALENDAR_DIVERGENCE');
-    }
+    shiftedDateNeedsCalendar = shiftedComparison.different && !input.calendarConvention;
     if (shiftedComparison.different && input.calendarConvention === 'vietnamese' && !warnings.includes('CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER')) {
       warnings.push('CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER');
     }
@@ -196,13 +197,20 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
   }
   const correctionChangesChart = profile.solarTime !== 'none' && key(uncorrectedChart) !== key(chart);
   if (correctionChangesChart) scenarios.push(uncorrectedChart);
-  if ((nearBoundary || correctionChangesChart) && uniqueCharts(scenarios).length > 1) {
-    const { selectable, blocked } = partitionScenarios(uniqueCharts(scenarios), candidateChart => candidateChart);
+  const distinctScenarios = uniqueCharts(scenarios);
+  if ((nearBoundary || correctionChangesChart) && distinctScenarios.length > 1) {
+    const { selectable, blocked } = partitionScenarios(distinctScenarios.filter(withinCalendarRange), candidateChart => candidateChart);
     if (blocked.length > 0) {
       audit.push({ step: 'blocked-scenarios', description: 'Scenarios blocked by calendar divergence filter.', data: { blocked } });
     }
-    audit.push({ step: 'boundary-scenarios', description: 'Returned selectable chart-ready scenarios for the branch/day boundary.', data: { boundaryMinutes, nearBoundary, correctionChangesChart, scenarios: selectable } });
-    return needs('HOUR_BOUNDARY', selectable);
+    if (selectable.length > 0) {
+      audit.push({ step: 'boundary-scenarios', description: 'Returned selectable chart-ready scenarios for the branch/day boundary.', data: { boundaryMinutes, nearBoundary, correctionChangesChart, scenarios: selectable } });
+      return needs('HOUR_BOUNDARY', selectable);
+    }
+  }
+  if (shiftedDateNeedsCalendar) {
+    warnings.push('SHIFTED_DATE_DIVERGENCE');
+    return needs('CALENDAR_DIVERGENCE');
   }
   return { status: 'ok', chart, audit, warnings };
 }
