@@ -23,6 +23,7 @@ const { createMockAdapter } = require('./adapters/mock');
  *   question?: string,
  *   focusPalace?: string,
  *   topKQuotes?: number,
+ *   maxPromptTokens?: number,
  *   maxRetries?: number,
  *   extraSensitiveValues?: string[],
  * }} [options]
@@ -41,7 +42,7 @@ async function interpretNatal(natalResult, options = {}) {
     facts: canonicalFacts,
   };
 
-  // 1. Build initial structural context (also scans `options.question` for birth PII)
+  // 1. Build initial structural context (scans user-entered `options.question` via free-text regex)
   const baseContext = buildAnonymizedContext(trustedNatal, {
     question: options.question,
     focusPalace: options.focusPalace,
@@ -61,11 +62,29 @@ async function interpretNatal(natalResult, options = {}) {
     retrievedQuotes,
   };
 
-  // 3. Build prompts and run strict PII firewall before ANY adapter invocation
-  const { systemPrompt, userPrompt } = buildPrompts(context);
-  const checkContext = assertNoBirthPii(JSON.stringify(baseContext), trustedNatal, extraSensitive);
-  const checkSystem = assertNoBirthPii(systemPrompt, trustedNatal, extraSensitive);
-  const checkUser = assertNoBirthPii(userPrompt, trustedNatal, extraSensitive);
+  // 3. Build prompts within configurable token budget and run PII firewall before ANY adapter invocation.
+  //    User-entered `question` was already checked with free-text regexes in step 1; here we check
+  //    exact chart birth values (dates, clock time, tz, coordinates, extraSensitive) on outbound payloads,
+  //    and exclude static lecture quote bodies from clock-time matching so quotes like "11 giờ đêm" never false-positive.
+  const { systemPrompt, userPrompt, promptChars, promptTokensEstimate } = buildPrompts(context, {
+    maxPromptTokens: options.maxPromptTokens,
+  });
+  const checkContext = assertNoBirthPii(JSON.stringify(baseContext), trustedNatal, extraSensitive, {
+    scanFreeTextPatterns: false,
+  });
+  const checkSystem = assertNoBirthPii(systemPrompt, trustedNatal, extraSensitive, {
+    scanFreeTextPatterns: false,
+  });
+  const promptWithoutQuotes = buildPrompts({ ...context, retrievedQuotes: [] }, {
+    maxPromptTokens: options.maxPromptTokens,
+  }).userPrompt;
+  const checkUser = assertNoBirthPii(promptWithoutQuotes, trustedNatal, extraSensitive, {
+    scanFreeTextPatterns: false,
+  });
+  // Still verify no extraSensitiveValues (like user's name) leaked anywhere in the final userPrompt
+  if (extraSensitive.length > 0) {
+    assertNoBirthPii(userPrompt, null, extraSensitive, { scanFreeTextPatterns: false });
+  }
   const directBirthIdentifiersStripped = Boolean(checkContext.passed && checkSystem.passed && checkUser.passed);
 
   // 4 & 5. Generate + Validate with automatic self-correction retry loop (covers JSON parse errors too!)
@@ -125,7 +144,8 @@ async function interpretNatal(natalResult, options = {}) {
     schemaVersion: INTERPRETATION_SCHEMA_VERSION,
     adapter: { id: adapter.id, kind: adapter.kind },
     attempts,
-    promptChars: systemPrompt.length + userPrompt.length,
+    promptChars,
+    promptTokensEstimate,
     // Never return unvalidated or hallucinated claims to downstream UI callers
     interpretation: isValid ? lastResponse : null,
     validation: lastValidation,

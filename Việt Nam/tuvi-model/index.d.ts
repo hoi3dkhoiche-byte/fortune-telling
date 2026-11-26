@@ -58,6 +58,9 @@ export type ValidationIssueCode =
   | 'CLAIM_STATEMENT_UNGROUNDED'
   | 'UNKNOWN_QUOTE_ID'
   | 'STAR_PALACE_CONTRADICTION'
+  | 'MING_BRANCH_CONTRADICTION'
+  | 'FIVE_ELEMENTS_CLASS_CONTRADICTION'
+  | 'DECADAL_RANGE_CONTRADICTION'
   | 'EMPTY_MING_CONTRADICTION'
   | 'SIHUA_CONTRADICTION'
   | 'UNGROUNDED_FATALISTIC_CLAIM'
@@ -220,6 +223,7 @@ export function loadCorpus(docsDir?: string): {
   }): RetrievedQuote[];
   getById(id: string): CorpusQuote | undefined;
 };
+export function estimatePromptTokens(text: string): number;
 export function scanQuestionForBirthPii(question: string | null | undefined): void;
 export function buildAnonymizedContext(
   natalResult: any,
@@ -234,10 +238,17 @@ export function assertNoBirthPii(
   serializedText: string,
   natalResult: any,
   extraSensitiveValues?: string[],
+  options?: { scanFreeTextPatterns?: boolean },
 ): { passed: true; checkedLength: number };
-export function buildPrompts(context: AnonymizedContext): {
+export function buildPrompts(
+  context: AnonymizedContext,
+  options?: { maxPromptTokens?: number },
+): {
   systemPrompt: string;
   userPrompt: string;
+  promptChars: number;
+  promptTokensEstimate: number;
+  maxPromptTokens: number;
 };
 export function createMockAdapter(): ModelAdapter;
 export function createOpenAICompatibleAdapter(options?: {
@@ -247,6 +258,7 @@ export function createOpenAICompatibleAdapter(options?: {
   allowRemote?: boolean;
   timeoutMs?: number;
   temperature?: number;
+  numCtx?: number;
   fetchImpl?: typeof fetch;
 }): ModelAdapter;
 export function interpretNatal(
@@ -257,6 +269,7 @@ export function interpretNatal(
     question?: string;
     focusPalace?: string;
     topKQuotes?: number;
+    maxPromptTokens?: number;
     maxRetries?: number;
     extraSensitiveValues?: string[];
   },
@@ -265,6 +278,7 @@ export function interpretNatal(
   adapter: { id: string; kind: string };
   attempts: number;
   promptChars: number;
+  promptTokensEstimate: number;
   interpretation: InterpretationResponse | null;
   validation: ValidationReport;
   retrievedQuotes: RetrievedQuote[];

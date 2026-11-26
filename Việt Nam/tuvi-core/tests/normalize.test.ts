@@ -52,16 +52,21 @@ test('boundary checking can be explicitly disabled while preserving deterministi
   if (result.status === 'ok') assert.equal(result.chart.hourBranch, 1);
 });
 
-test('boundary probes outside 1900–2050 leave the supported candidate available', () => {
-  for (const [date, time, profileId, year, month, day, hourBranch] of [
-    ['1900-01-01', '00:00', 'thienky-candidate', 1900, 1, 1, 0],
-    ['2050-12-31', '22:59', 'repro-v4', 2050, 12, 31, 11],
+test('boundary probes outside 1900–2050 leave the supported candidate available and emit explicit audit/warnings', () => {
+  for (const [date, time, profileId, year, month, day, hourBranch, droppedIso] of [
+    ['1900-01-01', '00:00', 'thienky-candidate', 1900, 1, 1, 0, '1899-12-31'],
+    ['1900-01-01', '00:01', 'thienky-candidate', 1900, 1, 1, 0, '1899-12-31'],
+    ['2050-12-31', '22:59', 'repro-v4', 2050, 12, 31, 11, '2051-01-01'],
   ] as const) {
     const result = normalizeBirth({ ...birth, date, time }, getProfile(profileId));
     assert.equal(result.status, 'needs');
     if (result.status === 'needs') {
       assert.equal(result.reason, 'HOUR_BOUNDARY');
       assert.deepEqual(result.scenarios, [{ year, month, day, hourBranch, gender: 'male' }]);
+      assert.ok(result.warnings.includes(`SCENARIO_OUT_OF_RANGE:${droppedIso}`), `${date} ${time}`);
+      const outStep = result.audit.find(step => step.step === 'out-of-range-scenarios');
+      assert.ok(outStep, `Expected out-of-range-scenarios audit step for ${date} ${time}`);
+      assert.deepEqual(outStep.data?.supportedRange, [1900, 2050]);
     }
   }
   assert.throws(
@@ -136,13 +141,25 @@ test('calendar disagreements emit standardized warning codes and support explici
   assert.equal(vietnamese.status, 'ok');
   if (vietnamese.status === 'ok') {
     assert.equal(vietnamese.chart.calendarConvention, 'vietnamese');
-    assert.deepEqual(vietnamese.warnings, ['CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER', 'VIETNAMESE_CALENDAR_MODEL']);
+    assert.deepEqual(vietnamese.warnings, [
+      'CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER',
+      'VIETNAMESE_CALENDAR_MODEL',
+      'HISTORICAL_VIETNAM_UTC8_CAUTION',
+    ]);
   }
   const vietnameseAgreed = normalizeBirth({ ...birth, calendarConvention: 'vietnamese' }, getProfile('repro-v4'));
   assert.equal(vietnameseAgreed.status, 'ok');
   if (vietnameseAgreed.status === 'ok') {
     assert.equal(vietnameseAgreed.chart.calendarConvention, 'vietnamese');
     assert.deepEqual(vietnameseAgreed.warnings, ['VIETNAMESE_CALENDAR_MODEL']);
+  }
+  const vietnamesePre1967Hanoi = normalizeBirth(
+    { ...birth, date: '1965-05-01', tz: 'Asia/Bangkok', calendarConvention: 'vietnamese' },
+    getProfile('repro-v4'),
+  );
+  assert.equal(vietnamesePre1967Hanoi.status, 'ok');
+  if (vietnamesePre1967Hanoi.status === 'ok') {
+    assert.ok(vietnamesePre1967Hanoi.warnings.includes('HISTORICAL_VIETNAM_UTC8_CAUTION'));
   }
   const explicit = normalizeBirth({ ...common, calendarConvention: 'chinese' }, getProfile('repro-v4'));
   assert.equal(explicit.status, 'ok');

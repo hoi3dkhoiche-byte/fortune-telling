@@ -109,7 +109,7 @@ test('Vietnamese adapter matches upstream Chinese placement on non-divergent dat
   assert.notEqual(vn.hash, cn.hash);
 });
 
-test('Vietnamese split keeps upstream placement on a shared leap day 30', () => {
+test('Vietnamese split keeps un-clamped day-30 star placement consistently across both shared and divergent leap-day-30 dates', () => {
   const profile = getProfile('repro-v4');
   const date = { year: 2017, month: 8, day: 21 };
   assert.deepEqual(solarToVietnamese(date), { year: 2017, month: 6, day: 30, isLeap: true });
@@ -119,6 +119,39 @@ test('Vietnamese split keeps upstream placement on a shared leap day 30', () => 
   assert.equal(cn.natal.ziweiPos, 11);
   assert.deepEqual(vn.natal, cn.natal);
   assert.equal(vn.provenance.calendar, 'vietnamese-astronomical-utc+7');
+
+  // Verify the 4 divergent dates where Vietnamese leap day 30 shifts to a 29-day next month
+  // also place Ziwei & day-dependent stars using raw leap day 30 (while displaying clamped lunarDay 29).
+  const divergentLeap30Cases = [
+    { year: 1917, month: 5, day: 20, expectedShiftedMonth: 4 },
+    { year: 1922, month: 8, day: 22, expectedShiftedMonth: 7 },
+    { year: 1947, month: 4, day: 20, expectedShiftedMonth: 3 },
+    { year: 1995, month: 10, day: 23, expectedShiftedMonth: 9 },
+  ];
+  for (const c of divergentLeap30Cases) {
+    const rawVn = solarToVietnamese(c);
+    assert.equal(rawVn.isLeap, true, `${c.year}-${c.month}-${c.day}`);
+    assert.equal(rawVn.day, 30, `${c.year}-${c.month}-${c.day}`);
+
+    const vnSplit = computeNatal(
+      { year: c.year, month: c.month, day: c.day, hourBranch: 6, gender: 'male', calendarConvention: 'vietnamese' },
+      profile,
+    );
+    assert.equal(vnSplit.natal.lunarInfo.lunarMonth, c.expectedShiftedMonth);
+    assert.equal(vnSplit.natal.lunarInfo.lunarDay, 29);
+
+    // Compare Ziwei position against day-30 formula vs day-29 formula for the same Cục (wuxingJu)
+    const ju = vnSplit.natal.wuxingJu;
+    const calcZiweiBranch = (lunarDay: number) => {
+      const rem = lunarDay % ju;
+      const diff = rem === 0 ? 0 : ju - rem;
+      const q = (lunarDay + diff) / ju;
+      const offset = diff % 2 === 0 ? q + diff : q - diff;
+      return (((2 + offset - 1) % 12) + 12) % 12;
+    };
+    assert.equal(vnSplit.natal.ziweiPos, calcZiweiBranch(30), `${c.year}-${c.month}-${c.day} must use placementDay=30`);
+    assert.notEqual(calcZiweiBranch(30), calcZiweiBranch(29), `${c.year}-${c.month}-${c.day} day 30 vs 29 must differ`);
+  }
 });
 
 test('lunar-javascript and iztro lunar-lite agree on every day from 1900 to 2050', () => {

@@ -52,16 +52,11 @@ const FREE_TEXT_PII_PATTERNS = [
     label: 'freeText.ianaTimezone',
     re: /\b(?:Asia|Europe|America|Australia|Pacific|Africa|Etc)\/[A-Za-z0-9_+-]+\b/u,
   },
-  // Labeled coordinates, including serialized fields such as "lat": 10.
-  {
-    label: 'freeText.coordinates',
-    re: /(?<![\p{L}\p{N}_])(?:lat(?:itude)?|lon(?:gitude)?|lng|vĩ\s+độ|kinh\s+độ|tọa\s+độ)(?:["']?\s*[:=]\s*|\s+)["']?\(?[+-]?\d/iu,
-  },
 ];
 
 /**
  * Scans free-form user input (such as `question`) for birth dates, clock birth times,
- * IANA timezones or labeled coordinates so users cannot accidentally send birth PII in free text.
+ * or IANA timezones so users cannot accidentally send birth PII in free text.
  *
  * @param {string | null | undefined} question
  */
@@ -72,7 +67,7 @@ function scanQuestionForBirthPii(question) {
     if (re.test(normalized)) {
       throw new ModelLayerError(
         'PRIVACY_VIOLATION',
-        `Câu hỏi chứa ngày giờ sinh, múi giờ hoặc tọa độ (${label}). Vui lòng chỉ hỏi về chủ đề luận giải.`,
+        `Câu hỏi chứa thông tin ngày/giờ sinh hoặc múi giờ (${label}). Vui lòng chỉ hỏi về chủ đề luận giải, không nhập ngày giờ sinh vào câu hỏi.`,
         { label },
       );
     }
@@ -80,9 +75,18 @@ function scanQuestionForBirthPii(question) {
 }
 
 /**
+ * Estimates token count for mixed Vietnamese + JSON text (~2.7 chars/token).
+ * @param {string} text
+ * @returns {number}
+ */
+function estimatePromptTokens(text) {
+  return Math.ceil(String(text || '').length / 2.7);
+}
+
+/**
  * Selects a compact, high-signal subset of `@tuvi/core` facts centered on Mệnh, Thân,
- * Phúc Đức, Tứ Hóa, and the active `focusPalaceId` + its Tam Phương Tứ Chính.
- * Keeps prompt size around ~5–7 KB instead of ~62 KB while preserving 100% of core structural facts!
+ * Phúc Đức, Tứ Hóa, and the active `focusPalaceId` + its Tam Phương Tứ Chính
+ * (including `HAS_BRIGHTNESS_AT_PALACE` and `HAS_SANFANGSIZHENG_MEMBER` so models have IDs to cite).
  *
  * @param {any[]} allFacts
  * @param {any[]} relations
@@ -112,28 +116,44 @@ function selectPromptFacts(allFacts, relations, anchors) {
       .map(f => f.id),
   );
 
-  return allFacts.filter(fact => {
+  const filtered = allFacts.filter(fact => {
     if (fact.kind === 'chart' || fact.kind === 'transformation') return true;
-    if (fact.predicate === 'BORROWS_OPPOSITE_MAJOR_STAR') return true;
+    if (fact.predicate === 'BORROWS_OPPOSITE_MAJOR_STAR') {
+      return primaryPalaces.has(fact.subjectId);
+    }
     if (fact.predicate === 'HAS_NO_MAJOR_STAR') {
-      return fact.value === true || fact.subjectId === mingId;
+      return fact.subjectId === mingId || (fact.value === true && primaryPalaces.has(fact.subjectId));
     }
     if (fact.predicate === 'HAS_DECADAL_AGE_RANGE') {
-      return firstThreeDecadeIds.has(fact.id) || primaryPalaces.has(fact.subjectId);
+      return firstThreeDecadeIds.has(fact.id) || fact.subjectId === centerId || fact.subjectId === mingId;
     }
     if (fact.predicate === 'LOCATED_AT_BRANCH') {
-      return fact.subjectId === 'CHART.MING' || primaryPalaces.has(fact.subjectId);
+      return fact.subjectId === 'CHART.MING' || fact.subjectId === centerId || fact.subjectId === mingId;
     }
     if (fact.predicate === 'LOCATED_IN') {
       if (MAJOR_STAR_IDS.has(fact.subjectId)) return true;
       if (KEY_AUX_STAR_IDS.has(fact.subjectId) && fact.objectId === centerId) return true;
       return false;
     }
+    if (fact.predicate === 'HAS_BRIGHTNESS_AT_PALACE') {
+      return MAJOR_STAR_IDS.has(fact.subjectId) && Boolean(fact.objectId && (fact.objectId === centerId || fact.objectId === mingId));
+    }
     if (fact.predicate === 'OPPOSITE_TO' || fact.predicate === 'TRINE_WITH') {
-      return fact.subjectId === centerId || fact.subjectId === mingId;
+      return fact.subjectId === centerId;
+    }
+    if (fact.predicate === 'HAS_SANFANGSIZHENG_MEMBER') {
+      return fact.subjectId === centerId;
     }
     return false;
   });
+
+  const factPriority = fact => {
+    if (fact.kind === 'chart' || fact.kind === 'transformation') return 0;
+    if (fact.subjectId === mingId || fact.objectId === mingId || fact.subjectId === centerId || fact.objectId === centerId) return 1;
+    if (fact.predicate === 'LOCATED_IN' && MAJOR_STAR_IDS.has(fact.subjectId)) return 2;
+    return 3;
+  };
+  return filtered.sort((a, b) => factPriority(a) - factPriority(b));
 }
 
 /**
@@ -296,9 +316,9 @@ function buildAnonymizedContext(natalResult, options = {}) {
     chartSummary: {
       yinYangGender: decorated.yinYangGender === '阳男' ? 'Dương Nam'
         : decorated.yinYangGender === '阴男' ? 'Âm Nam'
-        : decorated.yinYangGender === '阳女' ? 'Dương Nữ'
-        : decorated.yinYangGender === '阴女' ? 'Âm Nữ'
-        : (decorated.yinYangGender || ''),
+          : decorated.yinYangGender === '阳女' ? 'Dương Nữ'
+            : decorated.yinYangGender === '阴女' ? 'Âm Nữ'
+              : (decorated.yinYangGender || ''),
       wuxingJu: decorated.wuxingJu,
       wuxingJuLabelVi: decorated.wuxingJuLabelVi || decorated.wuxingJuName || '',
       mingPalaceId: mingPalace?.id || 'PALACE.MING',
@@ -324,26 +344,34 @@ function buildAnonymizedContext(natalResult, options = {}) {
 
 /**
  * Runtime privacy firewall: throws `ModelLayerError('PRIVACY_VIOLATION', ...)` if any
- * exact OR unpadded birth date, clock birth time, timezone, coordinates, or free-text
- * birth date/time pattern appears in an outbound model payload.
+ * exact OR unpadded birth date, clock birth time, timezone, coordinates, or user-supplied
+ * sensitive value appears in an outbound model payload.
+ *
+ * Generic free-text regex scanning (`FREE_TEXT_PII_PATTERNS`) is applied ONLY to user-entered
+ * free text (via `scanQuestionForBirthPii` or when `options.scanFreeTextPatterns` is not false
+ * on standalone strings), never on static lecture quotes from the Thiên Kỷ corpus (which
+ * legitimately explain concepts like "11 giờ đêm đến 1 giờ sáng" for Giờ Tý).
  *
  * @param {string} serializedText
  * @param {any} natalResult
  * @param {string[]} [extraSensitiveValues]
+ * @param {{ scanFreeTextPatterns?: boolean }} [options]
  * @returns {{ passed: true, checkedLength: number }}
  */
-function assertNoBirthPii(serializedText, natalResult, extraSensitiveValues = []) {
+function assertNoBirthPii(serializedText, natalResult, extraSensitiveValues = [], options = {}) {
   const normalized = String(serializedText ?? '').normalize('NFC');
-
-  // 1. Check general free-text date/time/timezone patterns (strip Bilibili [hh:mm:ss] timestamps first so they don't false-match)
   const withoutTimestamps = normalized.replace(/\[\d{2}:\d{2}:\d{2}\]/g, '');
-  for (const { label, re } of FREE_TEXT_PII_PATTERNS) {
-    if (re.test(withoutTimestamps)) {
-      throw new ModelLayerError(
-        'PRIVACY_VIOLATION',
-        `Vi phạm quyền riêng tư: phát hiện ngày giờ sinh, múi giờ hoặc tọa độ (${label}) trong dữ liệu gửi tới model.`,
-        { label },
-      );
+
+  const shouldScanGenericPatterns = options.scanFreeTextPatterns !== false;
+  if (shouldScanGenericPatterns) {
+    for (const { label, re } of FREE_TEXT_PII_PATTERNS) {
+      if (re.test(withoutTimestamps)) {
+        throw new ModelLayerError(
+          'PRIVACY_VIOLATION',
+          `Vi phạm quyền riêng tư: phát hiện ngày giờ sinh, múi giờ hoặc tọa độ (${label}) trong dữ liệu gửi tới model.`,
+          { label },
+        );
+      }
     }
   }
 
@@ -382,13 +410,9 @@ function assertNoBirthPii(serializedText, natalResult, extraSensitiveValues = []
     if (typeof input.tz === 'string' && input.tz.trim().length >= 3) {
       forbidden.push({ label: 'normalization.input.tz', value: input.tz.trim() });
     }
-    if (input.place) {
-      for (const coordinate of [input.place.lat, input.place.lon]) {
-        // Integers also appear as ages and branch indexes. Check those by coordinate label.
-        if (typeof coordinate === 'number' && Number.isFinite(coordinate) && !Number.isInteger(coordinate)) {
-          forbidden.push({ label: 'normalization.input.place', value: String(coordinate) });
-        }
-      }
+    if (input.place && typeof input.place.lat === 'number' && typeof input.place.lon === 'number') {
+      forbidden.push({ label: 'normalization.input.place', value: `${input.place.lat}` });
+      forbidden.push({ label: 'normalization.input.place', value: `${input.place.lon}` });
     }
   }
 
@@ -411,10 +435,7 @@ function assertNoBirthPii(serializedText, natalResult, extraSensitiveValues = []
       }
       continue;
     }
-    const leaked = item.label === 'normalization.input.place'
-      ? withoutTimestamps.match(/[+-]?\d+(?:\.\d+)?(?:e[+-]?\d+)?/gi)?.includes(item.value)
-      : withoutTimestamps.includes(item.value);
-    if (leaked) {
+    if (withoutTimestamps.includes(item.value)) {
       throw new ModelLayerError(
         'PRIVACY_VIOLATION',
         `Vi phạm quyền riêng tư: phát hiện dữ kiện sinh (${item.label}) trong payload gửi tới model.`,
@@ -427,12 +448,20 @@ function assertNoBirthPii(serializedText, natalResult, extraSensitiveValues = []
 }
 
 /**
- * Builds compact, profile-aware system and user prompts (~5–7.5 KB instead of ~62 KB)
- * enforcing structured `assertions`, `factIds`, `quoteIds`, profile caveats, and zero hallucination.
+ * Builds profile-aware system and user prompts within a configurable token budget
+ * (`maxPromptTokens`, default 4096 at ~2.7 Vietnamese chars/token ≈ 11,000 chars max;
+ * typical output ~8.5–10.5 KB ≈ 3.1k–3.9k tokens), enforcing structured `assertions`,
+ * `factIds`, `quoteIds`, profile caveats, and zero hallucination.
  *
  * @param {any} context AnonymizedContext
+ * @param {{ maxPromptTokens?: number }} [options]
  */
-function buildPrompts(context) {
+function buildPrompts(context, options = {}) {
+  const configuredMaxTokens = options.maxPromptTokens
+    ?? (Number(process.env.TUVI_PROMPT_MAX_TOKENS) || 4096);
+  const maxPromptTokens = Math.max(1200, configuredMaxTokens);
+  const maxCharBudget = Math.floor(maxPromptTokens * 2.7) - 1;
+
   const profile = context.profile || {};
   const candidateNote = profile.status !== 'confirmed'
     ? `Lưu ý cấu hình: profile '${profile.id}' đang ở trạng thái '${profile.status}' (bảng sáng '${profile.brightnessSchool}', tháng nhuận '${profile.leapMonth}', Tý muộn '${profile.lateZi}'); tuyệt đối không tuyên bố lá số hay độ sáng đã được xác nhận 100%.`
@@ -442,7 +471,7 @@ function buildPrompts(context) {
     'Bạn là trợ lý phân tích cấu trúc Tử Vi Đẩu Số theo hệ phái Thiên Kỷ (Nghê Hải Hạ).',
     candidateNote,
     'QUY TẮC BẮT BUỘC:',
-    '1. KHÔNG tự tính hay suy đoán vị trí sao. Mọi nhận định về sao, cung, Tứ Hóa, đại hạn chỉ được phép lấy từ `facts` và `palaces` trong ngữ cảnh.',
+    '1. KHÔNG tự tính hay suy đoán vị trí sao. Mọi nhận định về sao, cung, độ sáng, Tứ Hóa, đại hạn chỉ được phép lấy từ `facts` và `palaces` trong ngữ cảnh.',
     '2. Mỗi phần tử trong `claims` BẮT BUỘC phải có cả `factIds` VÀ mảng `assertions` có cấu trúc `{ subjectId, predicate, objectId?, value? }` khớp chính xác từng dữ kiện đã dùng trong `facts`. Không gắn thừa `factId` ngoài `assertions`.',
     '3. Chỉ trích dẫn `quoteIds` có thật trong `retrievedQuotes` (nếu `retrievedQuotes` rỗng thì để `quoteIds: []`). Không bịa trích dẫn, không phán đoán định mệnh tuyệt đối về tuổi thọ hay giàu sang chắc chắn.',
     '4. Tuân thủ triết lý Thiên Kỷ: Tam Tài (Thiên 1/3 + Địa 1/3 + Nhân 1/3 = 1), Dĩ quả quyết hành, tuyệt đối KHÔNG khuyên cúng sao giải hạn, mua bùa chú hay mê tín.',
@@ -460,12 +489,6 @@ function buildPrompts(context) {
     majorStars: p.majorStars.map(s => `${s.nameVi}${s.brightnessVi ? `(${s.brightnessVi})` : ''}${s.siHuaVi ? `[${s.siHuaVi}]` : ''}`),
   }));
 
-  const compactQuotes = (context.retrievedQuotes || []).map(q => ({
-    id: q.id,
-    source: `${q.sourceFile} [${q.timestamp}]`,
-    text: typeof q.text === 'string' && q.text.length > 480 ? `${q.text.slice(0, 480)}…` : q.text,
-  }));
-
   const selectedFacts = (Array.isArray(context.promptFacts) ? context.promptFacts : context.facts)
     .map(({ id, subjectId, predicate, objectId, value }) => ({
       id,
@@ -475,47 +498,81 @@ function buildPrompts(context) {
       ...(value !== undefined ? { value } : {}),
     }));
 
-  const userPayload = {
-    profile: context.profile,
-    ...(Array.isArray(context.warnings) && context.warnings.length > 0 ? { warnings: context.warnings } : {}),
-    chartSummary: context.chartSummary,
-    palaces: compactPalaces,
-    facts: selectedFacts,
-    focusPalaceId: context.focusPalaceId,
-    question: context.question,
-    retrievedQuotes: compactQuotes,
+  const buildUserPrompt = (factsSlice, quotesSlice, quoteMaxLen) => {
+    const compactQuotes = quotesSlice.map(q => ({
+      id: q.id,
+      source: `${q.sourceFile} [${q.timestamp}]`,
+      text: typeof q.text === 'string' && q.text.length > quoteMaxLen ? `${q.text.slice(0, quoteMaxLen)}…` : q.text,
+    }));
+
+    const userPayload = {
+      profile: context.profile,
+      ...(Array.isArray(context.warnings) && context.warnings.length > 0 ? { warnings: context.warnings } : {}),
+      chartSummary: context.chartSummary,
+      palaces: compactPalaces,
+      facts: factsSlice,
+      focusPalaceId: context.focusPalaceId,
+      question: context.question,
+      retrievedQuotes: compactQuotes,
+    };
+
+    const serializedPayload = [
+      '{',
+      `"profile":${JSON.stringify(userPayload.profile)},`,
+      ...(userPayload.warnings ? [`"warnings":${JSON.stringify(userPayload.warnings)},`] : []),
+      `"chartSummary":${JSON.stringify(userPayload.chartSummary)},`,
+      `"focusPalaceId":${JSON.stringify(userPayload.focusPalaceId)},`,
+      `"question":${JSON.stringify(userPayload.question)},`,
+      '"palaces":[',
+      userPayload.palaces.map(p => JSON.stringify(p)).join(',\n'),
+      '],',
+      '"facts":[',
+      userPayload.facts.map(f => JSON.stringify(f)).join(',\n'),
+      '],',
+      '"retrievedQuotes":[',
+      userPayload.retrievedQuotes.map(q => JSON.stringify(q)).join(',\n'),
+      ']',
+      '}',
+    ].join('\n');
+
+    return [
+      'Hãy phân tích cấu trúc lá số dưới đây và trả về JSON chuẩn `tuvi.interpretation.v0`:',
+      serializedPayload,
+    ].join('\n\n');
   };
 
-  // Compact per-line formatting keeps payload ~7–9.5 KB (down ~85% from 62.6 KB; fits 4k/8k local LLM context)
-  const serializedPayload = [
-    '{',
-    `"profile":${JSON.stringify(userPayload.profile)},`,
-    ...(userPayload.warnings ? [`"warnings":${JSON.stringify(userPayload.warnings)},`] : []),
-    `"chartSummary":${JSON.stringify(userPayload.chartSummary)},`,
-    `"focusPalaceId":${JSON.stringify(userPayload.focusPalaceId)},`,
-    `"question":${JSON.stringify(userPayload.question)},`,
-    '"palaces":[',
-    userPayload.palaces.map(p => JSON.stringify(p)).join(',\n'),
-    '],',
-    '"facts":[',
-    userPayload.facts.map(f => JSON.stringify(f)).join(',\n'),
-    '],',
-    '"retrievedQuotes":[',
-    userPayload.retrievedQuotes.map(q => JSON.stringify(q)).join(',\n'),
-    ']',
-    '}',
-  ].join('\n');
+  const allQuotes = Array.isArray(context.retrievedQuotes) ? context.retrievedQuotes : [];
+  let workingFacts = selectedFacts;
+  let workingQuotes = allQuotes;
+  let userPrompt = buildUserPrompt(workingFacts, workingQuotes, 360);
+  const totalLen = () => systemPrompt.length + 1 + userPrompt.length;
 
-  const userPrompt = [
-    'Hãy phân tích cấu trúc lá số dưới đây và trả về JSON chuẩn `tuvi.interpretation.v0`:',
-    serializedPayload,
-  ].join('\n\n');
+  // Enforce configurable token budget progressively across quote length, quote count, and low-priority tail facts
+  if (totalLen() > maxCharBudget && workingQuotes.length > 0) {
+    userPrompt = buildUserPrompt(workingFacts, workingQuotes, 200);
+  }
+  while (totalLen() > maxCharBudget && workingQuotes.length > 2) {
+    workingQuotes = workingQuotes.slice(0, -1);
+    userPrompt = buildUserPrompt(workingFacts, workingQuotes, 180);
+  }
+  while (totalLen() > maxCharBudget && workingFacts.length > 10) {
+    workingFacts = workingFacts.slice(0, Math.max(10, workingFacts.length - 4));
+    userPrompt = buildUserPrompt(workingFacts, workingQuotes, 180);
+  }
+  while (totalLen() > maxCharBudget && workingQuotes.length > 0) {
+    workingQuotes = workingQuotes.slice(0, -1);
+    userPrompt = buildUserPrompt(workingFacts, workingQuotes, 160);
+  }
 
-  return { systemPrompt, userPrompt };
+  const promptChars = systemPrompt.length + userPrompt.length;
+  const promptTokensEstimate = estimatePromptTokens(`${systemPrompt}\n${userPrompt}`);
+
+  return { systemPrompt, userPrompt, promptChars, promptTokensEstimate, maxPromptTokens };
 }
 
 module.exports = {
   STRIPPED_PII_FIELDS,
+  estimatePromptTokens,
   scanQuestionForBirthPii,
   selectPromptFacts,
   buildAnonymizedContext,

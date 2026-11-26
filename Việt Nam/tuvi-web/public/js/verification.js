@@ -4,6 +4,7 @@ const warningLabels = {
   CALENDAR_DIVERGENCE_CHINESE_EXPLICIT: 'Lịch Trung và lịch Việt khác nhau ngày này. Đang dùng quy ước lịch Trung theo lựa chọn của bạn.',
   CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER: 'Lịch Việt (UTC+7) và lịch Trung khác nhau ngày này. Đang dùng adapter lịch Việt để an sao theo ngày âm lịch Việt Nam.',
   VIETNAMESE_CALENDAR_MODEL: 'Kiểm tra lịch Việt dùng mô hình thiên văn UTC+7 cố định (lưu ý: miền Nam giai đoạn 1960–1975 và Việt Nam trước 08/08/1967 từng dùng lịch UTC+8 trùng lịch Trung Quốc).',
+  HISTORICAL_VIETNAM_UTC8_CAUTION: 'Lưu ý lịch sử múi giờ: giai đoạn trước 08/08/1967 (toàn quốc) và 1960–13/06/1975 (miền Nam) thực tế hành chính dùng UTC+8 trùng lịch Trung Quốc; chọn lịch Việt UTC+7 có thể lệch ngày âm thực tế của đương số.',
   SHIFTED_DATE_DIVERGENCE: 'Ngày lập số sau hiệu chỉnh rơi vào ngày lịch Trung/Việt khác nhau.',
 };
 
@@ -16,6 +17,13 @@ export function translateWarning(warning) {
   }
   const fallbackMatch = /^SCENARIO_BLOCKED_DIVERGENCE:(.+)$/.exec(warning);
   if (fallbackMatch) return `Phương án ngày ${fallbackMatch[1]} bị chặn do lịch Việt và lịch Trung khác nhau.`;
+  const outRangeIso = /^SCENARIO_OUT_OF_RANGE:(\d{4})-(\d{2})-(\d{2})$/.exec(warning);
+  if (outRangeIso) {
+    const [, year, month, day] = outRangeIso;
+    return `Phương án ngày ${day}/${month}/${year} bị lược bỏ do nằm ngoài phạm vi năm hỗ trợ (1900–2050).`;
+  }
+  const outRangeFallback = /^SCENARIO_OUT_OF_RANGE:(.+)$/.exec(warning);
+  if (outRangeFallback) return `Phương án ngày ${outRangeFallback[1]} bị lược bỏ do nằm ngoài phạm vi năm hỗ trợ (1900–2050).`;
   return warning;
 }
 
@@ -114,6 +122,7 @@ const stepLabels = {
   'chart-ready': 'Ngày giờ dùng để lập số',
   'boundary-scenarios': 'Phương án gần ranh giờ',
   'blocked-scenarios': 'Phương án bị chặn do lịch khác nhau',
+  'out-of-range-scenarios': 'Phương án ngoài phạm vi năm hỗ trợ (1900–2050)',
   'user-scenario-selection': 'Phương án đã xác nhận',
 };
 

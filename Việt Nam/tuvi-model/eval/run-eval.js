@@ -101,8 +101,25 @@ function buildAdversarialCases() {
   if (normEmpty.status !== 'ok') throw new Error('Failed to normalize empty-Ming chart');
   const emptyNatal = /** @type {any} */ (core.computeNatal(normEmpty.chart, profile));
 
+  const normCoLuong = core.normalizeBirth(
+    { calendar: 'solar', date: '1990-08-15', time: '06:00', tz: 'Asia/Ho_Chi_Minh', gender: 'female' },
+    profile,
+  );
+  if (normCoLuong.status !== 'ok') throw new Error('Failed to normalize Co-Luong chart');
+  const coLuongNatal = /** @type {any} */ (core.computeNatal(normCoLuong.chart, profile));
+
   const mingFact = baseNatal.facts.find(f => f.subjectId === 'CHART.MING' && f.predicate === 'LOCATED_AT_BRANCH');
   const tlFact = baseNatal.facts.find(f => f.subjectId === 'STAR.TIANLIANG' && f.objectId === 'PALACE.MING');
+  const tlKhoaFact = baseNatal.facts.find(f => f.subjectId === 'STAR.TIANLIANG' && f.predicate === 'HAS_NATAL_TRANSFORMATION');
+  const tlBrightFact = baseNatal.facts.find(
+    f => f.subjectId === 'STAR.TIANLIANG' && f.predicate === 'HAS_BRIGHTNESS_AT_PALACE' && f.objectId === 'PALACE.MING',
+  );
+  const sfszFact = baseNatal.facts.find(
+    f => f.subjectId === 'PALACE.MING' && f.predicate === 'HAS_SANFANGSIZHENG_MEMBER',
+  );
+  const mingDecadalFact = baseNatal.facts.find(
+    f => f.subjectId === 'PALACE.MING' && f.predicate === 'HAS_DECADAL_AGE_RANGE',
+  );
   const juFact = baseNatal.facts.find(f => f.predicate === 'HAS_FIVE_ELEMENTS_CLASS');
 
   const validBase = () => ({
@@ -114,10 +131,10 @@ function buildAdversarialCases() {
         id: 'CLAIM.1',
         category: 'menh-than',
         statement: 'Thiên Lương tọa thủ Mệnh tại cung Mùi.',
-        assertions: [
+        assertions: /** @type {Array<{ subjectId: string, predicate: string, objectId?: string, value?: unknown }>} */ ([
           { subjectId: mingFact.subjectId, predicate: mingFact.predicate, objectId: mingFact.objectId },
           { subjectId: tlFact.subjectId, predicate: tlFact.predicate, objectId: tlFact.objectId },
-        ],
+        ]),
         factIds: [mingFact.id, tlFact.id],
         quoteIds: ['TK.03T.001'],
         confidence: 'high',
@@ -240,8 +257,16 @@ function buildAdversarialCases() {
       quotes: allowedQuotes,
       response: (() => { const r = validBase(); r.summary = 'Năm sinh có Văn Xương Hóa Kỵ cần lưu ý giấy tờ.'; return r; })(),
     },
+    {
+      id: 'adv-post-comma-ming-branch-contradiction',
+      expectedValid: false,
+      expectedCode: 'MING_BRANCH_CONTRADICTION',
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => { const r = validBase(); r.summary = 'Nhìn tổng thể, cung Mệnh an tại Tý.'; return r; })(),
+    },
 
-    // --- 4 True-Negative Cases (independent valid payloads that MUST pass: expectedValid = true) ---
+    // --- 14 True-Negative Cases (realistic LLM-style valid payloads that MUST pass: expectedValid = true) ---
     {
       id: 'tn-valid-baseline-nfc',
       expectedValid: true,
@@ -306,6 +331,164 @@ function buildAdversarialCases() {
         };
       })(),
     },
+    {
+      id: 'tn-valid-tu-vi-dau-so-discipline-phrase-1990-08-15',
+      expectedValid: true,
+      natal: coLuongNatal,
+      quotes: [],
+      response: (() => {
+        const clMing = coLuongNatal.facts.find(f => f.subjectId === 'CHART.MING' && f.predicate === 'LOCATED_AT_BRANCH');
+        const tianji = coLuongNatal.facts.find(f => f.subjectId === 'STAR.TIANJI' && f.objectId === 'PALACE.MING');
+        const tianliang = coLuongNatal.facts.find(f => f.subjectId === 'STAR.TIANLIANG' && f.objectId === 'PALACE.MING');
+        return {
+          schemaVersion: INTERPRETATION_SCHEMA_VERSION,
+          summary: 'Theo tử vi đẩu số, bộ Cơ Lương tọa thủ Mệnh tại Thìn thiên về tư duy phân tích và mưu lược.',
+          reasoningSteps: ['Đối chiếu chính tinh cung Mệnh trên lá số tử vi hiện tại.'],
+          claims: [
+            {
+              id: 'CLAIM.1',
+              category: 'menh-than',
+              statement: 'Theo tử vi đẩu số, trên lá số tử vi này Thiên Cơ và Thiên Lương đồng độ tại cung Mệnh ở Thìn.',
+              assertions: [
+                { subjectId: clMing.subjectId, predicate: clMing.predicate, objectId: clMing.objectId },
+                { subjectId: tianji.subjectId, predicate: tianji.predicate, objectId: tianji.objectId },
+                { subjectId: tianliang.subjectId, predicate: tianliang.predicate, objectId: tianliang.objectId },
+              ],
+              factIds: [clMing.id, tianji.id, tianliang.id],
+              quoteIds: [],
+              confidence: 'high',
+            },
+          ],
+          actionGuidance: ['Tập trung trau dồi chuyên môn thực chất.'],
+          disclaimer: 'Tham khảo học thuật.',
+        };
+      })(),
+    },
+    {
+      id: 'tn-valid-khong-can-cung-sao-giai-han',
+      expectedValid: true,
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        r.actionGuidance = ['Không cần cúng sao giải hạn, hãy tập trung cải thiện thói quen làm việc và sức khỏe.'];
+        return r;
+      })(),
+    },
+    {
+      id: 'tn-valid-khong-phai-cung-bai-hay-mua-bua',
+      expectedValid: true,
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        r.actionGuidance = ['Không phải cúng bái hay mua bùa mà đổi được vận, trọng tâm là hành động thực tế.'];
+        return r;
+      })(),
+    },
+    {
+      id: 'tn-valid-hay-bai-tru-me-tin-nhu-deo-bua-cung-bai',
+      expectedValid: true,
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        r.actionGuidance = ['Hãy bài trừ mê tín như đeo bùa, cúng bái và xem bói toán định mệnh.'];
+        return r;
+      })(),
+    },
+    {
+      id: 'tn-valid-negated-fatalistic-clause',
+      expectedValid: true,
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        r.summary = 'Môn tử vi dùng để tham chiếu xu hướng tính cách, tuyệt đối không phán đoán giàu có, sống thọ trăm tuổi một cách máy móc.';
+        return r;
+      })(),
+    },
+    {
+      id: 'tn-valid-brightness-citation',
+      expectedValid: true,
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        r.claims[0].statement = `Thiên Lương tọa thủ Mệnh tại Mùi đạt độ sáng ${tlBrightFact.value}.`;
+        r.claims[0].assertions.push({
+          subjectId: tlBrightFact.subjectId,
+          predicate: tlBrightFact.predicate,
+          objectId: tlBrightFact.objectId,
+          value: tlBrightFact.value,
+        });
+        r.claims[0].factIds.push(tlBrightFact.id);
+        return r;
+      })(),
+    },
+    {
+      id: 'tn-valid-sanfangsizheng-citation',
+      expectedValid: true,
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        r.claims[0].statement = 'Cung Mệnh tại Mùi có Thiên Lương tọa thủ Mệnh và hội chiếu tam phương tứ chính đồng bộ.';
+        r.claims[0].assertions.push({
+          subjectId: sfszFact.subjectId,
+          predicate: sfszFact.predicate,
+          objectId: sfszFact.objectId,
+        });
+        r.claims[0].factIds.push(sfszFact.id);
+        return r;
+      })(),
+    },
+    {
+      id: 'tn-valid-orthography-hoa-khoa-and-sihua',
+      expectedValid: true,
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        r.summary = 'Cung Mệnh toạ thủ tại Mùi, có Thiên Lương hoá khoa chủ sự học hỏi điềm đạm.';
+        r.claims[0].statement = 'Thiên Lương hoá khoa toạ thủ Mệnh tại cung Mùi.';
+        r.claims[0].assertions.push({
+          subjectId: tlKhoaFact.subjectId,
+          predicate: tlKhoaFact.predicate,
+          objectId: tlKhoaFact.objectId,
+        });
+        r.claims[0].factIds.push(tlKhoaFact.id);
+        return r;
+      })(),
+    },
+    {
+      id: 'tn-valid-intro-comma-ming-ju-decadal',
+      expectedValid: true,
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        const [start, end] = mingDecadalFact.value;
+        r.summary = `Xét tổng cục trên lá số tử vi, cung Mệnh an tại Mùi, Cục là Thổ Ngũ Cục, đại hạn tại Mệnh từ ${start} đến ${end} tuổi.`;
+        r.claims[0].assertions.push(
+          { subjectId: juFact.subjectId, predicate: juFact.predicate, objectId: juFact.objectId, value: juFact.value },
+          { subjectId: mingDecadalFact.subjectId, predicate: mingDecadalFact.predicate, value: mingDecadalFact.value },
+        );
+        r.claims[0].factIds.push(juFact.id, mingDecadalFact.id);
+        return r;
+      })(),
+    },
+    {
+      id: 'tn-valid-trine-mention-without-false-contradiction',
+      expectedValid: true,
+      natal: baseNatal,
+      quotes: allowedQuotes,
+      response: (() => {
+        const r = validBase();
+        r.summary = 'Cung Mệnh tại Mùi có Thiên Lương tọa thủ Mệnh; khi luận cần xét đồng thời tam hợp Mệnh – Tài Bạch – Quan Lộc.';
+        return r;
+      })(),
+    },
   ];
 }
 
@@ -355,6 +538,8 @@ async function runEval(options = {}) {
   let privacyFailures = 0;
   let maxPromptChars = 0;
   let totalPromptChars = 0;
+  let maxPromptTokensEstimate = 0;
+  let totalPromptTokensEstimate = 0;
 
   for (const item of BENCHMARK_CASES) {
     const profile = core.getProfile(item.profileId);
@@ -382,6 +567,8 @@ async function runEval(options = {}) {
       if (v.metrics.citedQuoteCount > 0) totalQuotedCases++;
       maxPromptChars = Math.max(maxPromptChars, output.promptChars);
       totalPromptChars += output.promptChars;
+      maxPromptTokensEstimate = Math.max(maxPromptTokensEstimate, output.promptTokensEstimate);
+      totalPromptTokensEstimate += output.promptTokensEstimate;
       if (!output.privacy.directBirthIdentifiersStripped) privacyFailures++;
 
       results.push({
@@ -389,6 +576,7 @@ async function runEval(options = {}) {
         valid: v.valid,
         attempts: output.attempts,
         promptChars: output.promptChars,
+        promptTokensEstimate: output.promptTokensEstimate,
         claims: v.metrics.claimCount,
         verifiedAssertions: v.metrics.verifiedAssertionCount,
         citedFacts: v.metrics.citedFactCount,
@@ -426,6 +614,8 @@ async function runEval(options = {}) {
     quoteCitationCaseRate: Number((totalQuotedCases / BENCHMARK_CASES.length).toFixed(4)),
     avgPromptChars: Math.round(totalPromptChars / BENCHMARK_CASES.length),
     maxPromptChars,
+    avgPromptTokensEstimate: Math.round(totalPromptTokensEstimate / BENCHMARK_CASES.length),
+    maxPromptTokensEstimate,
     privacyFailures,
   };
 

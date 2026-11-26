@@ -94,10 +94,25 @@ const FATALISTIC_PATTERNS = [
   /(?<![\p{L}\p{N}])(?:chết\s+yểu|tuyệt\s+mạng\s+năm|trúng\s+số\s+độc\s+đắc|tai\s+nạn\s+chết\s+người)(?![\p{L}\p{N}])/iu,
 ];
 
-// Strict anti-superstition negation: only allows anti-superstition verbs/nouns (or compound superstition items) between the negation and the term
-const STRICT_ANTI_SUPERSTITION_PREFIX = /(?<![\p{L}\p{N}])(?:tuyệt đối không|không nên|không được|không áp dụng|không dùng|không tin|không làm|không đi|không|chớ|tránh|bài trừ|phản đối|đừng|thay vì)(?:\s+(?:tin|dùng|áp|dụng|làm|đi|nghe|theo|vào|hay|hoặc|và|chuyện|việc|hình|thức|các|trò|mê|tín|cúng|dâng|sao|giải|hạn|lễ|hóa|mua|đeo|yểm|bùa|chú|bái|xem|bói)){0,10}\s*$/iu;
-const DIRECTIVE_PIVOT_SPLIT = /[.,;!?:\n—–()]|(?<![\p{L}\p{N}])(?:nhưng|mà|tuy nhiên|hãy|nên đi|cần đi|phải đi|tốt nhất là|cứ đi)(?![\p{L}\p{N}])/iu;
-const CLAUSE_SPLIT = /[.,;!?:\n—–()]|(?<![\p{L}\p{N}])(?:nhưng|còn|mà|đồng thời|trong khi|bên cạnh đó)(?![\p{L}\p{N}])/iu;
+// Phrases where "tử vi" refers to the astrological discipline/chart rather than the star STAR.ZIWEI
+const DISCIPLINE_TUVI_REGEX = /(?<![\p{L}\p{N}])(?:tử\s+vi\s+đẩu\s+số|lá\s+số\s+tử\s+vi|môn\s+tử\s+vi|khoa\s+tử\s+vi|sách\s+tử\s+vi|hệ\s+phái\s+tử\s+vi|phái\s+tử\s+vi|hệ\s+tử\s+vi|học\s+tử\s+vi|xem\s+tử\s+vi|luận\s+tử\s+vi|giải\s+tử\s+vi|thuật\s+tử\s+vi|bàn\s+tử\s+vi|tử\s+vi\s+học)(?![\p{L}\p{N}])/giu;
+
+/**
+ * Strips references to "Tử Vi" as the astrological system/chart so they are never
+ * mistaken for mentions of the major star `STAR.ZIWEI`.
+ * @param {string} canonicalText
+ * @returns {string}
+ */
+function stripDisciplinePhrases(canonicalText) {
+  return canonicalText.replace(DISCIPLINE_TUVI_REGEX, ' ');
+}
+
+// Strict anti-superstition negation: supports "không cần/phải/nên...", "hãy bài trừ/tránh...", and comma-separated lists like "như đeo bùa, cúng bái"
+const STRICT_ANTI_SUPERSTITION_PREFIX = /(?<![\p{L}\p{N}])(?:(?:hãy|cần|nên|phải|luôn)\s+(?:tuyệt đối\s+)?(?:bài trừ|phản đối|loại bỏ|tránh xa|tránh|từ bỏ|bác bỏ)|tuyệt đối không|không cần|không phải|không nên|không được|không áp dụng|không dùng|không tin|không làm|không đi|không hề|không bao giờ|không|chớ|tránh xa|tránh|bài trừ|phản đối|loại bỏ|từ bỏ|bác bỏ|đừng|thay vì)(?:(?:\s+|\s*,\s*)(?:cần|phải|nên|được|hề|bao|giờ|tin|dùng|áp|dụng|làm|đi|nghe|theo|vào|như|là|ví|dụ|chẳng|hạn|kiểu|dạng|hay|hoặc|và|chuyện|việc|hình|thức|các|những|trò|thói|tệ|mê|tín|dị|đoan|cúng|dâng|sao|giải|hạn|lễ|hóa|mua|đeo|yểm|xin|bùa|chú|bái|xem|bói|tốn|tiền|vô|ích)){0,16}[\s,]*$/iu;
+// Do NOT split on bare dashes inside numeric ranges (e.g. 20–30 tuổi) or on "hãy" before anti-superstition verbs
+const DIRECTIVE_PIVOT_SPLIT = /[.!?;:\n()]|\s+[—–]\s+|(?<![\p{L}\p{N}])(?:nhưng|mà|tuy nhiên|nên đi|cần đi|phải đi|tốt nhất là|cứ đi|hãy(?!\s+(?:tuyệt đối\s+)?(?:bài trừ|phản đối|loại bỏ|tránh|từ bỏ|bác bỏ|không)))(?![\p{L}\p{N}])/iu;
+const CLAUSE_SPLIT = /[.,;!?:\n()]|\s+[—–]\s+|(?<![\p{L}\p{N}])(?:nhưng|còn|mà|đồng thời|trong khi|bên cạnh đó)(?![\p{L}\p{N}])/iu;
+const SENTENCE_SPLIT = /[.!?;:\n]+|\s+[—–]\s+/u;
 
 /**
  * @param {string} text
@@ -122,14 +137,14 @@ const JU_VI_TO_ID = new Map(Object.values(glossary.wuxingJu)
 const BRANCH_PATTERN = [...BRANCH_VI_TO_ID.keys()].map(escapeRegex).join('|');
 const JU_PATTERN = [...JU_VI_TO_ID.keys()].map(escapeRegex).join('|');
 const MING_BRANCH_STATEMENT = new RegExp(
-  '^(?:cung\\s+)?mệnh\\s+(?:an tại|tại|ở|cư)\\s+(?:cung\\s+)?(' + BRANCH_PATTERN + ')(?![\\p{L}\\p{N}])', 'u',
+  '(?<![\\p{L}\\p{N}])(?:cung\\s+)?mệnh\\s+(?:an tại|lập tại|tại|ở|cư)\\s+(?:cung\\s+)?(' + BRANCH_PATTERN + ')(?![\\p{L}\\p{N}])', 'giu',
 );
 const JU_STATEMENT = new RegExp(
-  '^(?:ngũ hành\\s+)?cục(?:\\s+(?:trên|của)\\s+lá số)?\\s+là\\s+(' + JU_PATTERN + ')(?![\\p{L}\\p{N}])', 'u',
+  '(?<![\\p{L}\\p{N}])(?:ngũ hành\\s+)?cục(?:\\s+(?:trên|của)\\s+lá số)?\\s+(?:là|thuộc)\\s+(' + JU_PATTERN + ')(?![\\p{L}\\p{N}])', 'giu',
 );
 const DECADAL_STATEMENT = new RegExp(
-  '^đại hạn\\s+(?:tại|ở)\\s+(?:cung\\s+)?(' + PALACE_PATTERN
-    + ')\\s+(?:từ\\s+)?(\\d+)\\s*(?:đến|[-–—])\\s*(\\d+)\\s+tuổi(?![\\p{L}\\p{N}])', 'u',
+  '(?<![\\p{L}\\p{N}])đại hạn\\s+(?:tại|ở)\\s+(?:cung\\s+)?(' + PALACE_PATTERN
+    + ')\\s+(?:từ\\s+)?(\\d+)\\s*(?:đến|[-–—])\\s*(\\d+)\\s+tuổi(?![\\p{L}\\p{N}])', 'giu',
 );
 
 // Covers: tọa thủ, đóng tại/ở, tọa tại, nhập (cung), tại (cung), ở (cung), cư (cung/tại), nằm ở/tại, thuộc cung
@@ -164,7 +179,7 @@ function detectSuperstition(rawText) {
     for (const term of SUPERSTITION_TERMS) {
       let idx = seg.indexOf(term);
       while (idx !== -1) {
-        const immediatePrefix = seg.slice(Math.max(0, idx - 80), idx);
+        const immediatePrefix = seg.slice(Math.max(0, idx - 110), idx);
         if (!STRICT_ANTI_SUPERSTITION_PREFIX.test(immediatePrefix)) {
           return term;
         }
@@ -178,18 +193,19 @@ function detectSuperstition(rawText) {
 /**
  * Detects ungrounded fatalistic fortune-telling statements (longevity guarantees,
  * guaranteed wealth/poverty, etc.) that cannot be derived from structural chart facts.
+ * Splits on sentence boundaries (NOT commas!) so patterns like "giàu có, sống thọ" match cleanly.
  *
  * @param {string} rawText
  * @returns {string | null}
  */
 function detectFatalisticClaim(rawText) {
-  const segments = canonicalizeVi(rawText).split(CLAUSE_SPLIT);
-  for (const seg of segments) {
+  const sentences = canonicalizeVi(rawText).split(SENTENCE_SPLIT);
+  for (const sent of sentences) {
     for (const pattern of FATALISTIC_PATTERNS) {
-      const m = pattern.exec(seg);
+      const m = pattern.exec(sent);
       if (m) {
-        const prefix = seg.slice(Math.max(0, m.index - 32), m.index);
-        if (!/(?:không|chớ|tránh|không thể khẳng định|không phán đoán|không kết luận)\s*[^.,;]*$/iu.test(prefix)) {
+        const prefix = sent.slice(Math.max(0, m.index - 48), m.index);
+        if (!/(?<![\p{L}\p{N}])(?:không|chớ|tránh|không thể khẳng định|không phán đoán|không kết luận)(?![\p{L}\p{N}])[^.!?;]*$/iu.test(prefix)) {
           return m[0];
         }
       }
@@ -328,29 +344,45 @@ function validateInterpretation(response, natalResult, allowedQuotes = []) {
    * @param {string} path
    */
   function auditTextTruth(rawText, path) {
-    const normalizedText = canonicalizeVi(rawText);
+    const normalizedText = stripDisciplinePhrases(canonicalizeVi(rawText));
     const clauses = normalizedText.split(CLAUSE_SPLIT);
 
-    // Check direct factual sentences in addition to the structured assertions.
-    // Keep age-range dashes intact for this pass.
-    for (const part of normalizedText.split(/[.!?;]+/u)) {
+    // Check direct factual statements anywhere in a sentence (including after introductory commas).
+    for (const part of normalizedText.split(SENTENCE_SPLIT)) {
       const sentence = part.trim();
-      const branch = MING_BRANCH_STATEMENT.exec(sentence);
-      const ju = JU_STATEMENT.exec(sentence);
-      const decadal = DECADAL_STATEMENT.exec(sentence);
-      if (branch && mingBranchId && BRANCH_VI_TO_ID.get(branch[1]) !== mingBranchId) {
-        contradictionCount++;
-        errors.push({ code: 'MING_BRANCH_CONTRADICTION', path, message: 'Địa chi của cung Mệnh trong câu không khớp lá số.' });
+      MING_BRANCH_STATEMENT.lastIndex = 0;
+      let mBranch;
+      while ((mBranch = MING_BRANCH_STATEMENT.exec(sentence)) !== null) {
+        const pre = sentence.slice(Math.max(0, mBranch.index - 22), mBranch.index);
+        if (/(?:không phải|không)\s*$/iu.test(pre)) continue;
+        if (mingBranchId && BRANCH_VI_TO_ID.get(mBranch[1]) !== mingBranchId) {
+          contradictionCount++;
+          errors.push({ code: 'MING_BRANCH_CONTRADICTION', path, message: 'Địa chi của cung Mệnh trong câu không khớp lá số.' });
+        }
       }
-      if (ju && juId && JU_VI_TO_ID.get(ju[1]) !== juId) {
-        contradictionCount++;
-        errors.push({ code: 'FIVE_ELEMENTS_CLASS_CONTRADICTION', path, message: 'Ngũ hành Cục trong câu không khớp lá số.' });
+
+      JU_STATEMENT.lastIndex = 0;
+      let mJu;
+      while ((mJu = JU_STATEMENT.exec(sentence)) !== null) {
+        const pre = sentence.slice(Math.max(0, mJu.index - 22), mJu.index);
+        if (/(?:không phải|không)\s*$/iu.test(pre)) continue;
+        if (juId && JU_VI_TO_ID.get(mJu[1]) !== juId) {
+          contradictionCount++;
+          errors.push({ code: 'FIVE_ELEMENTS_CLASS_CONTRADICTION', path, message: 'Ngũ hành Cục trong câu không khớp lá số.' });
+        }
       }
-      const palaceId = decadal && PALACE_VI_TO_ID.get(decadal[1]);
-      const range = palaceId ? decadalByPalace.get(palaceId) : undefined;
-      if (decadal && Array.isArray(range) && (Number(decadal[2]) !== range[0] || Number(decadal[3]) !== range[1])) {
-        contradictionCount++;
-        errors.push({ code: 'DECADAL_RANGE_CONTRADICTION', path, message: 'Khoảng tuổi đại hạn trong câu không khớp cung trên lá số.' });
+
+      DECADAL_STATEMENT.lastIndex = 0;
+      let mDec;
+      while ((mDec = DECADAL_STATEMENT.exec(sentence)) !== null) {
+        const pre = sentence.slice(Math.max(0, mDec.index - 22), mDec.index);
+        if (/(?:không phải|không)\s*$/iu.test(pre)) continue;
+        const palaceId = PALACE_VI_TO_ID.get(mDec[1]);
+        const range = palaceId ? decadalByPalace.get(palaceId) : undefined;
+        if (Array.isArray(range) && (Number(mDec[2]) !== range[0] || Number(mDec[3]) !== range[1])) {
+          contradictionCount++;
+          errors.push({ code: 'DECADAL_RANGE_CONTRADICTION', path, message: 'Khoảng tuổi đại hạn trong câu không khớp cung trên lá số.' });
+        }
       }
     }
 
@@ -523,7 +555,8 @@ function validateInterpretation(response, natalResult, allowedQuotes = []) {
     }
 
     // D. Verify every star mentioned in claim.statement is grounded in the claim's asserted entities or palaces
-    const normalizedStmt = canonicalizeVi(claim.statement);
+    //    (Strip discipline/chart phrases like "tử vi đẩu số", "lá số tử vi" first so they are not mistaken for STAR.ZIWEI!)
+    const normalizedStmt = stripDisciplinePhrases(canonicalizeVi(claim.statement));
     STAR_MENTION_REGEX.lastIndex = 0;
     let sMatch;
     while ((sMatch = STAR_MENTION_REGEX.exec(normalizedStmt)) !== null) {

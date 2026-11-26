@@ -66,6 +66,7 @@ function extractJsonResponse(rawText) {
  *   allowRemote?: boolean,
  *   timeoutMs?: number,
  *   temperature?: number,
+ *   numCtx?: number,
  *   fetchImpl?: typeof fetch,
  * }} [options]
  */
@@ -76,6 +77,7 @@ function createOpenAICompatibleAdapter(options = {}) {
   const allowRemote = options.allowRemote ?? (process.env.TUVI_LLM_ALLOW_REMOTE === '1');
   const timeoutMs = options.timeoutMs ?? 60_000;
   const temperature = options.temperature ?? 0.2;
+  const numCtx = options.numCtx ?? (Number(process.env.TUVI_LLM_NUM_CTX) || 8192);
   const fetchImpl = options.fetchImpl || globalThis.fetch;
 
   const loopback = isLoopbackUrl(baseUrl);
@@ -140,6 +142,7 @@ function createOpenAICompatibleAdapter(options = {}) {
               model,
               temperature,
               response_format: { type: 'json_object' },
+              ...(loopback && numCtx > 0 ? { options: { num_ctx: numCtx } } : {}),
               messages,
             }),
             signal: controller.signal,

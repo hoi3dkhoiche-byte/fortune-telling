@@ -3,7 +3,7 @@ import { Lunar, LunarMonth } from 'lunar-javascript';
 import { generateChart, getLunarInfo, type EffectiveLunarDate, type LunarMonthPolicy } from '../vendor/ziwei/algorithm';
 import { BRANCHES, STEMS } from '../vendor/ziwei/constants';
 import type { LunarInfo, ZiweiChart } from '../vendor/ziwei/types';
-import { compareCalendars, solarToVietnamese, vietnameseMonthDayCount, type CivilDate } from './calendar';
+import { solarToVietnamese, vietnameseMonthDayCount, type CivilDate } from './calendar';
 import type { ChartReady } from './types';
 
 const surrogateCache = new Map<string, CivilDate>();
@@ -126,13 +126,14 @@ export function generateVietnameseChart(input: ChartReady, policy: LunarMonthPol
   const effective = resolveEffectiveVietnameseLunarDate(input.year, input.month, input.day, policy);
   const solar = { year: input.year, month: input.month, day: input.day };
   const birth = { ...solar, hour: input.hourBranch, gender: input.gender };
-  // The split rule in iztro carries the raw leap day through placement, even
-  // when the next month's displayed date clamps to 29. Use that same path on
-  // shared leap dates to keep placement aligned with the upstream profile.
-  if (policy === 'split' && effective.rawLunarMonth < 0 && !compareCalendars(solar).different) {
-    return generateChart(birth, { leapMonth: policy });
-  }
-  const surrogate = findChineseSolarSurrogate(effective.lunarYear, effective.lunarMonth, effective.lunarDay);
+  // Under the split leap-month policy, upstream iztro places day-dependent stars using
+  // the un-clamped raw leap day (e.g. day 30) even when the shifted next month has 29 days
+  // and lunarInfo.lunarDay clamps to 29. Apply this uniformly across all 17 leap-day-30 dates
+  // (both the 13 shared dates and the 4 divergent dates: 1917-05-20, 1922-08-22, 1947-04-20, 1995-10-23).
+  const placementDay = policy === 'split' && effective.rawLunarMonth < 0
+    ? effective.rawLunarDay
+    : effective.lunarDay;
+  const surrogate = findChineseSolarSurrogate(effective.lunarYear, effective.lunarMonth, placementDay);
   const baseChart = generateChart(
     {
       year: surrogate.year,

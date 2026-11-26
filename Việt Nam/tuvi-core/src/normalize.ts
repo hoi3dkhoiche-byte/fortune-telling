@@ -116,7 +116,30 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
       warnings.push('CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER');
     }
   }
-  if (input.calendarConvention === 'vietnamese') warnings.push('VIETNAMESE_CALENDAR_MODEL');
+  if (input.calendarConvention === 'vietnamese') {
+    warnings.push('VIETNAMESE_CALENDAR_MODEL');
+  }
+  const isSouthernVietnamZone = input.tz === 'Asia/Ho_Chi_Minh' || input.tz === 'Asia/Saigon';
+  function needsHistoricalVietnamUtc8Caution(target: CivilDate): boolean {
+    const iso = formatDate(target);
+    return iso < '1967-08-08' || (isSouthernVietnamZone && iso >= '1960-01-01' && iso <= '1975-06-13');
+  }
+  if (input.calendarConvention === 'vietnamese' && needsHistoricalVietnamUtc8Caution(date)) {
+    warnings.push('HISTORICAL_VIETNAM_UTC8_CAUTION');
+  }
+  function recordOutOfRangeScenarios(charts: ChartReady[]): void {
+    const distinctOut = uniqueCharts(charts);
+    if (distinctOut.length === 0) return;
+    for (const outChart of distinctOut) {
+      const warning = `SCENARIO_OUT_OF_RANGE:${formatDate(outChart)}`;
+      if (!warnings.includes(warning)) warnings.push(warning);
+    }
+    audit.push({
+      step: 'out-of-range-scenarios',
+      description: 'Scenarios excluded because their shifted date falls outside supported calendar years 1900–2050.',
+      data: { outOfRange: distinctOut, supportedRange: [CALENDAR_YEAR_MIN, CALENDAR_YEAR_MAX] },
+    });
+  }
   function selectableScenario(chart: ChartReady): boolean {
     if (input.calendarConvention === 'chinese' || input.calendarConvention === 'vietnamese' || formatDate(chart) === formatDate(date)) return true;
     const checked = compareCalendars(chart);
@@ -147,7 +170,9 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
       chart: chartAt(date, timeCorrection(date, hour, minute, input, profile, candidate).seconds, input.gender, profile, input.calendarConvention),
     }));
     const inRange = allOptions.filter(option => withinCalendarRange(option.chart));
+    const outOfRange = allOptions.filter(option => !withinCalendarRange(option.chart)).map(option => option.chart);
     if (inRange.length === 0) assertYear(allOptions[0].chart.year);
+    recordOutOfRangeScenarios(outOfRange);
     const { selectable: scenarioOptions, blocked } = partitionScenarios(inRange, option => option.chart);
     if (blocked.length > 0) {
       audit.push({ step: 'blocked-scenarios', description: 'Scenarios blocked by calendar divergence filter.', data: { blocked } });
@@ -181,6 +206,9 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
     if (shiftedComparison.different && input.calendarConvention === 'vietnamese' && !warnings.includes('CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER')) {
       warnings.push('CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER');
     }
+    if (input.calendarConvention === 'vietnamese' && needsHistoricalVietnamUtc8Caution(chart) && !warnings.includes('HISTORICAL_VIETNAM_UTC8_CAUTION')) {
+      warnings.push('HISTORICAL_VIETNAM_UTC8_CAUTION');
+    }
   }
 
   const scenarios: ChartReady[] = [chart];
@@ -199,7 +227,10 @@ export function normalizeBirth(input: BirthInput, profile: Profile, options: { b
   if (correctionChangesChart) scenarios.push(uncorrectedChart);
   const distinctScenarios = uniqueCharts(scenarios);
   if ((nearBoundary || correctionChangesChart) && distinctScenarios.length > 1) {
-    const { selectable, blocked } = partitionScenarios(distinctScenarios.filter(withinCalendarRange), candidateChart => candidateChart);
+    const inRangeScenarios = distinctScenarios.filter(withinCalendarRange);
+    const outOfRangeScenarios = distinctScenarios.filter(candidateChart => !withinCalendarRange(candidateChart));
+    recordOutOfRangeScenarios(outOfRangeScenarios);
+    const { selectable, blocked } = partitionScenarios(inRangeScenarios, candidateChart => candidateChart);
     if (blocked.length > 0) {
       audit.push({ step: 'blocked-scenarios', description: 'Scenarios blocked by calendar divergence filter.', data: { blocked } });
     }

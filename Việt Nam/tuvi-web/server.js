@@ -195,7 +195,7 @@ function resolveBirthChart({ birth, profileId, selectedScenario, selectedInstant
       step: 'user-scenario-selection',
       description: 'Người dùng đã xác nhận phương án giờ sinh.',
       data: {
-        reason: normalized.reason,
+        reason: 'reason' in normalized ? normalized.reason : undefined,
         selectedScenario: chart,
         ...(instant === undefined ? {} : { selectedInstant: instant, utcOffsetMinutes }),
       },
@@ -324,8 +324,8 @@ const server = http.createServer(async (req, res) => {
           selectedScenario: selection?.selectedScenario,
           selectedInstant: selection?.selectedInstant,
         });
-        if (resolvedNatal.status === 'ok' && natalResult.hash !== undefined && natalResult.hash !== resolvedNatal.hash) {
-          throw new RequestError(409, 'Lá số đã thay đổi kể từ khi được lập. Hãy lập lại lá số rồi chạy đối chiếu.');
+        if (resolvedNatal.status === 'ok' && (typeof natalResult.hash !== 'string' || natalResult.hash !== resolvedNatal.hash)) {
+          throw new RequestError(409, 'Lá số thiếu mã kiểm chứng hoặc đã thay đổi kể từ khi được lập. Hãy lập lại lá số rồi chạy đối chiếu.');
         }
       } else {
         throw new RequestError(400, 'Cần truyền trường birth hoặc natalResult để phân tích.');

@@ -30,10 +30,15 @@ test('translateWarning dịch đầy đủ các mã chuẩn hóa và định d�
   assert.match(translateWarning('CALENDAR_DIVERGENCE_CHINESE_EXPLICIT'), /quy ước lịch Trung/i);
   assert.match(translateWarning('CALENDAR_DIVERGENCE_VIETNAMESE_ADAPTER'), /adapter lịch Việt/i);
   assert.match(translateWarning('VIETNAMESE_CALENDAR_MODEL'), /mô hình thiên văn UTC\+7/i);
+  assert.match(translateWarning('HISTORICAL_VIETNAM_UTC8_CAUTION'), /UTC\+8/i);
   assert.match(translateWarning('SHIFTED_DATE_DIVERGENCE'), /sau hiệu chỉnh/i);
   assert.equal(
     translateWarning('SCENARIO_BLOCKED_DIVERGENCE:1968-01-29'),
     'Phương án ngày 29/01/1968 bị chặn do lịch Việt và lịch Trung khác nhau.',
+  );
+  assert.equal(
+    translateWarning('SCENARIO_OUT_OF_RANGE:1899-12-31'),
+    'Phương án ngày 31/12/1899 bị lược bỏ do nằm ngoài phạm vi năm hỗ trợ (1900–2050).',
   );
   assert.equal(translateWarning('Cảnh báo tùy chỉnh'), 'Cảnh báo tùy chỉnh');
 });
@@ -144,13 +149,18 @@ test('buildVerification gắn nhãn chưa kiểm tra lại cho file mở lên v�
     assert.match(importedText, /Nguồn và phiên bản \(trong file · chưa kiểm tra lại\)/);
 
     const engineEl = /** @type {any} */ (buildVerification({
-      warnings: ['SCENARIO_BLOCKED_DIVERGENCE:1968-01-29'],
-      audit: [{ step: 'blocked-scenarios', data: { blocked: [{ year: 1968, month: 1, day: 29, hourBranch: 0, gender: 'male' }] } }],
+      warnings: ['SCENARIO_BLOCKED_DIVERGENCE:1968-01-29', 'SCENARIO_OUT_OF_RANGE:1899-12-31'],
+      audit: [
+        { step: 'blocked-scenarios', data: { blocked: [{ year: 1968, month: 1, day: 29, hourBranch: 0, gender: 'male' }] } },
+        { step: 'out-of-range-scenarios', data: { outOfRange: [{ year: 1899, month: 12, day: 31, hourBranch: 0, gender: 'male' }], supportedRange: [1900, 2050] } },
+      ],
     }));
     const engineText = engineEl.collectText();
     assert.doesNotMatch(engineText, /chưa kiểm tra lại/);
     assert.match(engineText, /Phương án ngày 29\/01\/1968 bị chặn/);
     assert.match(engineText, /Phương án bị chặn do lịch khác nhau/);
+    assert.match(engineText, /Phương án ngày 31\/12\/1899 bị lược bỏ/);
+    assert.match(engineText, /Phương án ngoài phạm vi năm hỗ trợ/);
   } finally {
     globalThis.document = prevDoc;
   }

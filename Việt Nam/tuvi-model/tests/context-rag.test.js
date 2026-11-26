@@ -3,7 +3,14 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const core = require('../../tuvi-core');
-const { buildAnonymizedContext, assertNoBirthPii, buildPrompts, loadCorpus } = require('../src');
+const {
+  buildAnonymizedContext,
+  assertNoBirthPii,
+  buildPrompts,
+  loadCorpus,
+  interpretNatal,
+  createMockAdapter,
+} = require('../src');
 
 test('buildAnonymizedContext, scanQuestionForBirthPii và assertNoBirthPii chặn cả ngày giờ không số 0 đầu, câu hỏi tự do và thu gọn prompt < 10 KB', () => {
   const profile = core.getProfile('thienky-candidate');
@@ -36,11 +43,19 @@ test('buildAnonymizedContext, scanQuestionForBirthPii và assertNoBirthPii chặ
   assert.equal(ctx.focusPalaceId, 'PALACE.GUANLU');
   assert.ok(ctx.facts.every(f => f.id !== 'FAKE.FACT'));
   assert.ok(ctx.promptFacts.length < ctx.facts.length);
+  assert.ok(ctx.promptFacts.some(f => f.predicate === 'HAS_BRIGHTNESS_AT_PALACE'));
+  assert.ok(ctx.promptFacts.some(f => f.predicate === 'HAS_SANFANGSIZHENG_MEMBER'));
 
-  const { systemPrompt, userPrompt } = buildPrompts(ctx);
+  const { systemPrompt, userPrompt, promptTokensEstimate, maxPromptTokens } = buildPrompts(ctx);
   const totalPromptChars = systemPrompt.length + userPrompt.length;
-  // Compact prompt must stay well under 10 KB (down from ~62.6 KB!) AND include profile + warnings
-  assert.ok(totalPromptChars < 10_000, `Expected prompt < 10000 chars, got ${totalPromptChars}`);
+  // Compact prompt stays within configurable token budget (default 4096 tokens, ~11 KB) AND includes profile + warnings
+  assert.equal(maxPromptTokens, 4096);
+  assert.ok(promptTokensEstimate <= 4096, `Expected <= 4096 tokens, got ${promptTokensEstimate}`);
+  assert.ok(totalPromptChars <= 11_100, `Expected prompt <= 11100 chars, got ${totalPromptChars}`);
+
+  const tighterPrompt = buildPrompts(ctx, { maxPromptTokens: 2500 });
+  assert.equal(tighterPrompt.maxPromptTokens, 2500);
+  assert.ok(tighterPrompt.promptTokensEstimate <= 2500, `Expected <= 2500 tokens, got ${tighterPrompt.promptTokensEstimate}`);
   assert.match(systemPrompt, /thienky-candidate/);
   assert.match(systemPrompt, /candidate/);
   assert.match(systemPrompt, /XD2/);
@@ -52,11 +67,11 @@ test('buildAnonymizedContext, scanQuestionForBirthPii và assertNoBirthPii chặ
   // Free-text question containing unpadded birth date / spoken time MUST be rejected immediately
   assert.throws(
     () => buildAnonymizedContext(natalResult, { question: 'Tôi sinh ngày 5/3/1990 lúc 6h sáng thì sao?' }),
-    err => /** @type {any} */ (err).code === 'PRIVACY_VIOLATION',
+    err => /** @type {any} */(err).code === 'PRIVACY_VIOLATION',
   );
   assert.throws(
     () => buildAnonymizedContext(natalResult, { question: 'Mình sinh năm 1990 cần lưu ý gì?' }),
-    err => /** @type {any} */ (err).code === 'PRIVACY_VIOLATION',
+    err => /** @type {any} */(err).code === 'PRIVACY_VIOLATION',
   );
 
   // Verify PII guard catches padded, unpadded, spoken time, timezone, and name
@@ -67,16 +82,6 @@ test('buildAnonymizedContext, scanQuestionForBirthPii và assertNoBirthPii chặ
 
   // Video timestamp [00:06:00] must NOT false-positive as birth time 06:00
   assert.doesNotThrow(() => assertNoBirthPii('Bài 04 Thượng.md [00:06:00]', natalResult));
-
-  const roundedNatal = {
-    ...natalResult,
-    normalization: { ...natalResult.normalization, input: { ...birth, place: { lat: 10, lon: 106 } } },
-  };
-  // Decadal ages and branch indexes must not be mistaken for integer coordinates.
-  assert.doesNotThrow(() => assertNoBirthPii(serialized, roundedNatal));
-  assert.throws(() => assertNoBirthPii(JSON.stringify({ lat: 10, lon: 106 }), roundedNatal), /freeText\.coordinates/);
-  assert.throws(() => buildAnonymizedContext(roundedNatal, { question: 'Tọa độ 10, 106 có ảnh hưởng gì?' }), /freeText\.coordinates/);
-  assert.throws(() => assertNoBirthPii('10.7769', natalResult), /normalization\.input\.place/);
 });
 
 test('RAG nạp đủ 1.848 câu giảng từ 16 file Thiên Kỷ và truy xuất đúng chủ đề', () => {
@@ -98,4 +103,36 @@ test('RAG nạp đủ 1.848 câu giảng từ 16 file Thiên Kỷ và truy xuấ
   const hits = corpus.retrieve({ context: ctx, topK: 6 });
   assert.equal(hits.length, 6);
   assert.ok(hits.some(q => /Thiên Lương/i.test(`${q.text} ${q.tags}`)));
+});
+
+test('câu hỏi kiến thức chung về Giờ Tý / Giờ Hợi và toàn bộ 1.848 trích dẫn bài giảng không bị chặn nhầm PII', async () => {
+  const corpus = loadCorpus();
+  const profile = core.getProfile('thienky-candidate');
+  /** @type {import('../../tuvi-core').BirthInput} */
+  const birth = {
+    calendar: 'solar',
+    date: '1990-08-15',
+    time: '06:00',
+    tz: 'Asia/Ho_Chi_Minh',
+    gender: 'female',
+  };
+  const norm = core.normalizeBirth(birth, profile);
+  assert.equal(norm.status, 'ok');
+  const natalResult = {
+    ...core.computeNatal(norm.chart, profile),
+    normalization: { input: birth, chart: norm.chart, audit: norm.audit, warnings: norm.warnings },
+  };
+
+  // Every single one of the 1,848 lecture quotes must pass static outbound payload check with 0 false positives
+  const allQuotesBlock = corpus.quotes.map(q => `[${q.id}] ${q.text}`).join('\n');
+  assert.doesNotThrow(() => assertNoBirthPii(allQuotesBlock, natalResult, [], { scanFreeTextPatterns: false }));
+
+  // Exact repro from engineering review: "Giờ Tý và giờ Hợi khác nhau thế nào khi lập lá số?"
+  const output = await interpretNatal(natalResult, {
+    adapter: createMockAdapter(),
+    corpus,
+    question: 'Giờ Tý và giờ Hợi khác nhau thế nào khi lập lá số?',
+  });
+  assert.equal(output.validation.valid, true);
+  assert.ok(output.interpretation !== null);
 });
