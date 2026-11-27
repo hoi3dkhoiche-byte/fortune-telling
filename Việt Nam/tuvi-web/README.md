@@ -98,6 +98,9 @@ Việt Nam/tuvi-web/
 - `GET /api/health`: Trạng thái máy chủ, server time và phiên bản Node/core.
 - `GET /api/profiles`: Danh sách profiles (`thienky-candidate`, `repro-v4`) và bằng chứng kiểm chứng.
 - `GET /api/sample`: Trả về lá số mẫu minh họa 1990 với 12 cung đã gắn nhãn Việt.
+- `GET /api/corpus/stats`: Thống kê kho 16 bài giảng (**1.848 câu nguyên văn** Thiên Kỷ).
+- `GET /api/model/status`: Kiểm tra trạng thái kết nối runtime LLM cục bộ (`localhost` Ollama / vLLM), tên model cấu hình và danh sách model đã nạp.
+- `POST /api/interpret`: Tính lại lá số và `facts` phía server từ dữ kiện sinh, gỡ PII, truy xuất RAG theo cung trọng tâm (`focusPalace`), gọi adapter (`mock` hoặc `local`), kiểm định `assertions` + `factIds` + `quoteIds` qua Validator trước khi trả về.
 - `POST /api/natal`:
   - Nhận payload `{ birth: BirthInput, profileId?: string, selectedScenario?: ChartReady, selectedInstant?: string }`.
   - Trả `200` cùng `normalization.input`, `chart`, `audit` và `warnings` khi lập số thành công.

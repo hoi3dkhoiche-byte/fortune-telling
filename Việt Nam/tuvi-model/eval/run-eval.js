@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('node:fs');
+const path = require('node:path');
 const core = require('../../tuvi-core');
 const {
   INTERPRETATION_SCHEMA_VERSION,
@@ -494,7 +496,13 @@ function buildAdversarialCases() {
 
 async function runEval(options = {}) {
   const mode = options.mode || process.env.TUVI_EVAL_MODE || 'mock';
-  const adapter = options.adapter || (mode === 'local' ? createOpenAICompatibleAdapter() : createMockAdapter());
+  const adapter = options.adapter || (mode === 'local'
+    ? createOpenAICompatibleAdapter({
+        ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
+        ...(options.model ? { model: options.model } : {}),
+        ...(options.structuredOutputs !== undefined ? { structuredOutputs: options.structuredOutputs } : {}),
+      })
+    : createMockAdapter());
   const corpus = loadCorpus();
 
   // 1. Non-circular Adversarial & True-Negative Detector Evaluation
@@ -529,9 +537,10 @@ async function runEval(options = {}) {
     }
   }
 
-  // 2. End-to-End Pipeline Smoke & Prompt Budget Evaluation across 10 Charts
+  // 2. End-to-End Pipeline Smoke, Pass@1, Latency & Prompt Budget Evaluation across 10 Charts
   const results = [];
   let smokePassedCases = 0;
+  let passAt1Cases = 0;
   let totalClaims = 0;
   let totalGroundedClaims = 0;
   let totalQuotedCases = 0;
@@ -540,6 +549,10 @@ async function runEval(options = {}) {
   let totalPromptChars = 0;
   let maxPromptTokensEstimate = 0;
   let totalPromptTokensEstimate = 0;
+  /** @type {number[]} */
+  const latenciesMs = [];
+  /** @type {Record<string, number>} */
+  const errorHistogram = {};
 
   for (const item of BENCHMARK_CASES) {
     const profile = core.getProfile(item.profileId);
@@ -552,6 +565,7 @@ async function runEval(options = {}) {
       normalization: { input: item.birth, chart: normalized.chart, audit: normalized.audit, warnings: normalized.warnings },
     };
 
+    const startedAt = performance.now();
     try {
       const output = await interpretNatal(natal, {
         adapter,
@@ -560,8 +574,17 @@ async function runEval(options = {}) {
         focusPalace: item.focusPalace,
         extraSensitiveValues: ['Nguyễn Văn Eval'],
       });
+      const elapsedMs = Math.round(performance.now() - startedAt);
+      latenciesMs.push(elapsedMs);
       const v = output.validation;
-      if (v.valid && output.interpretation !== null) smokePassedCases++;
+      if (v.valid && output.interpretation !== null) {
+        smokePassedCases++;
+        if (output.attempts === 1) passAt1Cases++;
+      } else {
+        for (const err of v.errors || []) {
+          errorHistogram[err.code] = (errorHistogram[err.code] ?? 0) + 1;
+        }
+      }
       totalClaims += v.metrics.claimCount;
       totalGroundedClaims += v.metrics.groundedClaimCount;
       if (v.metrics.citedQuoteCount > 0) totalQuotedCases++;
@@ -575,6 +598,7 @@ async function runEval(options = {}) {
         id: item.id,
         valid: v.valid,
         attempts: output.attempts,
+        latencyMs: elapsedMs,
         promptChars: output.promptChars,
         promptTokensEstimate: output.promptTokensEstimate,
         claims: v.metrics.claimCount,
@@ -584,17 +608,30 @@ async function runEval(options = {}) {
         errors: v.errors,
       });
     } catch (error) {
+      const elapsedMs = Math.round(performance.now() - startedAt);
+      latenciesMs.push(elapsedMs);
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('quyền riêng tư') || (error && /** @type {any} */ (error).code === 'PRIVACY_VIOLATION')) {
+      const code = (error && /** @type {any} */ (error).code) || 'UNEXPECTED_ERROR';
+      errorHistogram[code] = (errorHistogram[code] ?? 0) + 1;
+      if (msg.includes('quyền riêng tư') || code === 'PRIVACY_VIOLATION') {
         privacyFailures++;
       }
       results.push({
         id: item.id,
         valid: false,
+        latencyMs: elapsedMs,
         error: msg,
       });
     }
   }
+
+  const sortedLat = [...latenciesMs].sort((a, b) => a - b);
+  const avgLatencyMs = sortedLat.length
+    ? Math.round(sortedLat.reduce((acc, x) => acc + x, 0) / sortedLat.length)
+    : 0;
+  const p95LatencyMs = sortedLat.length
+    ? sortedLat[Math.min(sortedLat.length - 1, Math.floor(sortedLat.length * 0.95))]
+    : 0;
 
   const adversarialRecall = adversarialPositives ? Number((adversarialCaught / adversarialPositives).toFixed(4)) : 0;
   const falsePositiveRate = trueNegatives ? Number((falsePositives / trueNegatives).toFixed(4)) : 0;
@@ -610,21 +647,47 @@ async function runEval(options = {}) {
     smokeTotalCases: BENCHMARK_CASES.length,
     smokePassedCases,
     smokePassRate: Number((smokePassedCases / BENCHMARK_CASES.length).toFixed(4)),
+    passAt1Cases,
+    passAt1Rate: Number((passAt1Cases / BENCHMARK_CASES.length).toFixed(4)),
     structuralAssertionRate: totalClaims ? Number((totalGroundedClaims / totalClaims).toFixed(4)) : 0,
     quoteCitationCaseRate: Number((totalQuotedCases / BENCHMARK_CASES.length).toFixed(4)),
     avgPromptChars: Math.round(totalPromptChars / BENCHMARK_CASES.length),
     maxPromptChars,
     avgPromptTokensEstimate: Math.round(totalPromptTokensEstimate / BENCHMARK_CASES.length),
     maxPromptTokensEstimate,
+    avgLatencyMs,
+    p95LatencyMs,
+    errorHistogram,
     privacyFailures,
   };
 
   return { summary, adversarialDetails, results };
 }
 
+function parseCliArgs(argv) {
+  /** @type {Record<string, string>} */
+  const parsed = {};
+  for (const arg of argv) {
+    const m = /^--([a-z0-9-]+)=(.+)$/i.exec(arg);
+    if (m) parsed[m[1]] = m[2];
+  }
+  return parsed;
+}
+
 if (require.main === module) {
-  runEval()
+  const cliArgs = parseCliArgs(process.argv.slice(2));
+  runEval({
+    mode: cliArgs.mode,
+    model: cliArgs.model,
+    baseUrl: cliArgs['base-url'],
+    structuredOutputs: cliArgs.structured ? cliArgs.structured === '1' || cliArgs.structured === 'true' : undefined,
+  })
     .then(report => {
+      if (cliArgs['save-report']) {
+        const outPath = path.resolve(cliArgs['save-report']);
+        fs.mkdirSync(path.dirname(outPath), { recursive: true });
+        fs.writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+      }
       console.log(JSON.stringify(report.summary, null, 2));
       const failedAdv = report.adversarialDetails.filter(d => !d.passed);
       if (

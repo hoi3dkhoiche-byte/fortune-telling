@@ -20,6 +20,7 @@ class AppState {
       isSample: false,           // Đang xem lá số mẫu
       isImported: false,         // Đang xem lá số mở từ file JSON ngoài (chưa kiểm tra lại)
       userName: '',              // Tên người dùng hiển thị
+      focusPalace: '',           // Mã cung trọng tâm khi chuyển sang màn Dữ kiện & Model
     };
   }
 
@@ -53,6 +54,11 @@ class AppState {
       this.setState({ currentView: viewName });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  }
+
+  openReadingForPalace(palaceId = '') {
+    this.setState({ focusPalace: palaceId || '', currentView: 'reading' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   setViewMode(mode) {

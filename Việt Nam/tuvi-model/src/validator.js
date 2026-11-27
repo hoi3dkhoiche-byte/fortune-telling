@@ -108,7 +108,7 @@ function stripDisciplinePhrases(canonicalText) {
 }
 
 // Strict anti-superstition negation: supports "không cần/phải/nên...", "hãy bài trừ/tránh...", and comma-separated lists like "như đeo bùa, cúng bái"
-const STRICT_ANTI_SUPERSTITION_PREFIX = /(?<![\p{L}\p{N}])(?:(?:hãy|cần|nên|phải|luôn)\s+(?:tuyệt đối\s+)?(?:bài trừ|phản đối|loại bỏ|tránh xa|tránh|từ bỏ|bác bỏ)|tuyệt đối không|không cần|không phải|không nên|không được|không áp dụng|không dùng|không tin|không làm|không đi|không hề|không bao giờ|không|chớ|tránh xa|tránh|bài trừ|phản đối|loại bỏ|từ bỏ|bác bỏ|đừng|thay vì)(?:(?:\s+|\s*,\s*)(?:cần|phải|nên|được|hề|bao|giờ|tin|dùng|áp|dụng|làm|đi|nghe|theo|vào|như|là|ví|dụ|chẳng|hạn|kiểu|dạng|hay|hoặc|và|chuyện|việc|hình|thức|các|những|trò|thói|tệ|mê|tín|dị|đoan|cúng|dâng|sao|giải|hạn|lễ|hóa|mua|đeo|yểm|xin|bùa|chú|bái|xem|bói|tốn|tiền|vô|ích)){0,16}[\s,]*$/iu;
+const STRICT_ANTI_SUPERSTITION_PREFIX = /(?<![\p{L}\p{N}])(?:(?:hãy|cần|nên|phải|luôn)\s+(?:tuyệt đối\s+)?(?:bài trừ|phản đối|loại bỏ|tránh xa|tránh|từ bỏ|bác bỏ)|tuyệt đối không|không cần|không phải|không nên|không được|không áp dụng|không dùng|không tin|không làm|không đi|không hề|không bao giờ|không|chớ|tránh xa|tránh|bài trừ|phản đối|loại bỏ|từ bỏ|bác bỏ|đừng|thay vì)(?:(?:\s+|\s*,\s*)(?:cần|phải|nên|được|hề|bao|giờ|tin|dùng|áp|dụng|làm|đi|nghe|theo|vào|như|là|ví|dụ|chẳng|hạn|kiểu|dạng|hay|hoặc|và|chuyện|việc|hình|thức|mọi|tất|cả|các|những|trò|thói|tệ|mê|tín|dị|đoan|cúng|dâng|sao|giải|hạn|lễ|hóa|mua|đeo|yểm|xin|bùa|chú|bái|xem|bói|tốn|tiền|vô|ích)){0,16}[\s,]*$/iu;
 // Do NOT split on bare dashes inside numeric ranges (e.g. 20–30 tuổi) or on "hãy" before anti-superstition verbs
 const DIRECTIVE_PIVOT_SPLIT = /[.!?;:\n()]|\s+[—–]\s+|(?<![\p{L}\p{N}])(?:nhưng|mà|tuy nhiên|nên đi|cần đi|phải đi|tốt nhất là|cứ đi|hãy(?!\s+(?:tuyệt đối\s+)?(?:bài trừ|phản đối|loại bỏ|tránh|từ bỏ|bác bỏ|không)))(?![\p{L}\p{N}])/iu;
 const CLAUSE_SPLIT = /[.,;!?:\n()]|\s+[—–]\s+|(?<![\p{L}\p{N}])(?:nhưng|còn|mà|đồng thời|trong khi|bên cạnh đó)(?![\p{L}\p{N}])/iu;
@@ -144,7 +144,7 @@ const JU_STATEMENT = new RegExp(
 );
 const DECADAL_STATEMENT = new RegExp(
   '(?<![\\p{L}\\p{N}])đại hạn\\s+(?:tại|ở)\\s+(?:cung\\s+)?(' + PALACE_PATTERN
-    + ')\\s+(?:từ\\s+)?(\\d+)\\s*(?:đến|[-–—])\\s*(\\d+)\\s+tuổi(?![\\p{L}\\p{N}])', 'giu',
+  + ')\\s+(?:từ\\s+)?(\\d+)\\s*(?:đến|[-–—])\\s*(\\d+)\\s+tuổi(?![\\p{L}\\p{N}])', 'giu',
 );
 
 // Covers: tọa thủ, đóng tại/ở, tọa tại, nhập (cung), tại (cung), ở (cung), cư (cung/tại), nằm ở/tại, thuộc cung

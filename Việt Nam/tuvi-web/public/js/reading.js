@@ -1,5 +1,5 @@
 import { getDisplayNatal } from './chart.js';
-import { interpretNatalApi } from './api.js';
+import { fetchModelStatus, interpretNatalApi } from './api.js';
 
 /** Tóm tắt các nhận định có ID nguồn trong dữ kiện của engine. */
 export function buildFactSummary(result) {
@@ -125,22 +125,33 @@ export function renderFactSummary(container, result) {
 
 /**
  * Hiển thị khu vực chạy lớp model kiểm định cấu trúc (Mock đối chứng hoặc LLM cục bộ)
- * kèm danh sách lỗi kiểm định chi tiết và trích dẫn bài giảng Thiên Kỷ.
+ * kèm chọn cung trọng tâm, trạng thái runtime, chuỗi suy luận <think> và trích dẫn Thiên Kỷ.
+ *
+ * @param {HTMLElement} container
+ * @param {any} result
+ * @param {{ initialFocusPalace?: string }} [options]
  */
-export function renderModelPanel(container, result) {
+export function renderModelPanel(container, result, options = {}) {
   if (!result?.natal) return;
+  const displayNatal = getDisplayNatal(result);
   const card = document.createElement('section');
   card.className = 'reading-card model-panel';
 
+  const headRow = document.createElement('div');
+  headRow.className = 'model-panel-head';
   const heading = document.createElement('h2');
   heading.className = 'reading-card-title';
   heading.textContent = 'Đối chiếu dữ kiện & Lớp Model';
+  const runtimeBadge = document.createElement('span');
+  runtimeBadge.className = 'model-runtime-badge';
+  runtimeBadge.textContent = 'Đang kiểm tra runtime…';
+  headRow.append(heading, runtimeBadge);
 
   if (result.importedFromFile === true) {
     const unverifiedMsg = document.createElement('div');
     unverifiedMsg.className = 'alert-box alert-warning';
     unverifiedMsg.textContent = 'Lá số đang xem được mở từ file JSON ngoài (chưa được máy chủ kiểm chứng lại). Để đảm bảo tính toàn vẹn dữ kiện, lớp model bị vô hiệu hóa với file nhập ngoài — hãy nhập ngày giờ sinh để lập lá số trực tiếp từ engine.';
-    card.append(heading, unverifiedMsg);
+    card.append(headRow, unverifiedMsg);
     container.append(card);
     return;
   }
@@ -152,10 +163,30 @@ export function renderModelPanel(container, result) {
   const controls = document.createElement('div');
   controls.className = 'model-controls';
 
+  const focusSelect = document.createElement('select');
+  focusSelect.id = 'model-focus-palace';
+  focusSelect.className = 'form-select model-focus-select';
+  focusSelect.setAttribute('aria-label', 'Cung trọng tâm phân tích');
+  const defaultFocusOpt = document.createElement('option');
+  defaultFocusOpt.value = '';
+  defaultFocusOpt.textContent = 'Trọng tâm: Toàn cục (Mệnh · Thân · Tứ Hóa)';
+  focusSelect.append(defaultFocusOpt);
+  for (const palace of displayNatal?.palaces || []) {
+    const opt = document.createElement('option');
+    opt.value = palace.id || palace.labelVi || palace.name;
+    const pLabel = palace.labelVi || palace.name;
+    const bLabel = palace.branchLabelVi ? ` (${palace.branchLabelVi})` : '';
+    opt.textContent = `Cung ${pLabel}${bLabel}`;
+    focusSelect.append(opt);
+  }
+  if (options.initialFocusPalace) {
+    focusSelect.value = options.initialFocusPalace;
+  }
+
   const questionInput = document.createElement('input');
   questionInput.type = 'text';
   questionInput.className = 'form-input';
-  questionInput.placeholder = 'Chủ đề cần xem (tùy chọn, không nhập ngày giờ sinh — ví dụ: cung Quan Lộc, Tứ Hóa)...';
+  questionInput.placeholder = 'Câu hỏi chuyên đề (tùy chọn, không nhập ngày giờ sinh — ví dụ: hướng rèn luyện sự nghiệp)...';
   questionInput.maxLength = 500;
   questionInput.setAttribute('aria-label', 'Câu hỏi phân tích lá số');
 
@@ -177,7 +208,37 @@ export function renderModelPanel(container, result) {
   runBtn.className = 'btn btn-primary btn-sm';
   runBtn.textContent = 'Chạy đối chiếu';
 
-  controls.append(questionInput, modeSelect, runBtn);
+  controls.append(focusSelect, questionInput, modeSelect, runBtn);
+
+  // Probe local LLM runtime status asynchronously so trained models on Ollama/vLLM are auto-detected
+  let userChangedMode = false;
+  modeSelect.addEventListener('change', () => { userChangedMode = true; });
+  fetchModelStatus().then(status => {
+    if (status?.localReachable) {
+      const modelLabel = status.configuredModel || 'localhost';
+      runtimeBadge.textContent = status.modelLoaded === false
+        ? `Runtime online · Chưa nạp ${modelLabel}`
+        : `LLM cục bộ sẵn sàng · ${modelLabel}`;
+      runtimeBadge.classList.add('is-online');
+      if (!userChangedMode && status.defaultMode === 'local' && status.modelLoaded !== false) {
+        modeSelect.value = 'local';
+      }
+    } else {
+      runtimeBadge.textContent = 'Chế độ đối chứng (Ollama/vLLM đang tắt)';
+    }
+  });
+
+  const highlightFactRow = factId => {
+    const rows = container.querySelectorAll('[data-fact-id]');
+    for (const el of rows) {
+      if (el instanceof HTMLElement && el.dataset.factId === factId) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('fact-row-highlight');
+        setTimeout(() => el.classList.remove('fact-row-highlight'), 1800);
+        return;
+      }
+    }
+  };
 
   const outputArea = document.createElement('div');
   outputArea.className = 'model-output';
@@ -189,6 +250,7 @@ export function renderModelPanel(container, result) {
     const res = await interpretNatalApi({
       natalResult: result,
       question: questionInput.value.trim() || undefined,
+      focusPalace: focusSelect.value || undefined,
       mode: modeSelect.value,
     });
     runBtn.disabled = false;
@@ -240,6 +302,22 @@ export function renderModelPanel(container, result) {
       outputArea.append(summaryP);
     }
 
+    if (Array.isArray(interpretation?.reasoningSteps) && interpretation.reasoningSteps.length > 0) {
+      const cotDetails = document.createElement('details');
+      cotDetails.className = 'verification model-cot-box';
+      const cotSummary = document.createElement('summary');
+      cotSummary.textContent = `Chuỗi suy luận kiểm chứng (${interpretation.reasoningSteps.length} bước)`;
+      const cotList = document.createElement('ol');
+      cotList.className = 'reading-card-body fact-list';
+      for (const stepText of interpretation.reasoningSteps) {
+        const li = document.createElement('li');
+        li.textContent = stepText;
+        cotList.append(li);
+      }
+      cotDetails.append(cotSummary, cotList);
+      outputArea.append(cotDetails);
+    }
+
     if (Array.isArray(interpretation?.claims) && interpretation.claims.length > 0) {
       const list = document.createElement('ul');
       list.className = 'reading-card-body model-claim-list';
@@ -253,9 +331,12 @@ export function renderModelPanel(container, result) {
         const meta = document.createElement('div');
         meta.className = 'model-claim-meta';
         for (const fid of claim.factIds || []) {
-          const badge = document.createElement('span');
+          const badge = document.createElement('button');
+          badge.type = 'button';
           badge.className = 'fact-id-pill';
           badge.textContent = fid;
+          badge.title = 'Nhấn để đối chiếu dòng dữ kiện gốc ở trên';
+          badge.addEventListener('click', () => highlightFactRow(fid));
           meta.append(badge);
         }
         for (const qid of claim.quoteIds || []) {
@@ -323,6 +404,6 @@ export function renderModelPanel(container, result) {
     }
   });
 
-  card.append(heading, privacyNote, controls, outputArea);
+  card.append(headRow, privacyNote, controls, outputArea);
   container.append(card);
 }

@@ -27,6 +27,8 @@ datasets/
 *.zst
 ziwei-interp-v4-all/
 ziwei-interp-v4-all.tar
+**/dataset-out/
+**/eval/reports/
 
 # ==========================================
 # NODE, BUILD CACHE & PHỤ THUỘC

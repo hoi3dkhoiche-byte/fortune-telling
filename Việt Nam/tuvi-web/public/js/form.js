@@ -14,8 +14,8 @@ export function formatUtcOffset(minutes) {
 }
 
 export function setupForm() {
-  const byId = id => /** @type {HTMLElement} */ (document.getElementById(id));
-  const inputById = id => /** @type {HTMLInputElement} */ (document.getElementById(id));
+  const byId = id => /** @type {HTMLElement} */(document.getElementById(id));
+  const inputById = id => /** @type {HTMLInputElement} */(document.getElementById(id));
   const form = /** @type {HTMLFormElement} */ (document.getElementById('birth-form'));
   const solarGroup = byId('solar-date-group');
   const lunarGroup = byId('lunar-date-group');
@@ -68,10 +68,10 @@ export function setupForm() {
     const intro = document.createElement('p');
     intro.textContent = ambiguous
       ? options.length === 1
-        ? 'Giờ đồng hồ này xảy ra hai lần. Còn một phương án khả dụng để xác nhận.'
+        ? 'Giờ đồng hồ này xảy ra hai lần, nhưng chỉ còn một phương án khả dụng với quy ước lịch hiện tại.'
         : 'Giờ đồng hồ này xảy ra hai lần. Chọn độ lệch UTC theo hồ sơ sinh.'
       : options.length === 1
-        ? 'Giờ sinh gần ranh giữa hai giờ hoặc hai ngày lập số. Còn một phương án khả dụng để xác nhận.'
+        ? 'Giờ sinh gần ranh giữa hai giờ hoặc hai ngày lập số. Chỉ có một phương án khả dụng với quy ước lịch hiện tại.'
         : 'Giờ sinh gần ranh giữa hai giờ hoặc hai ngày lập số. Chọn phương án phù hợp với dữ kiện sinh.';
     modalBody.append(intro);
     for (const warning of result.warnings || []) {
@@ -186,7 +186,7 @@ export function setupForm() {
 
   // Mọi thay đổi biểu mẫu làm mất hiệu lực của phương án đã tính trước đó.
   const clearPending = (event) => {
-    if (event?.target?.id === 'user-name' || event?.target?.id === 'json-file-input') return;
+    if (event?.target?.id === 'user-name') return;
     request++;
     pending = null;
     closeModal(false);
@@ -240,6 +240,7 @@ export function setupForm() {
       error: null,
       needsInfo: null,
       userName,
+      focusPalace: '',
       selectedBranch: (data.displayNatal || data.natal)?.mingGongBranch ?? null,
     });
     state.setView('chart');
@@ -293,23 +294,26 @@ export function setupForm() {
   const jsonFileInput = document.getElementById('json-file-input');
   if (openJsonBtn && jsonFileInput instanceof HTMLInputElement) {
     openJsonBtn.addEventListener('click', () => jsonFileInput.click());
-    jsonFileInput.addEventListener('change', async () => {
+    jsonFileInput.addEventListener('change', () => {
       const file = jsonFileInput.files?.[0];
       if (!file) return;
-      jsonFileInput.value = '';
-      const id = ++request;
-      pending = null;
-      closeModal(false);
-      state.setState({ isLoading: true, error: null, needsInfo: null });
-      try {
-        const content = await file.text();
-        if (id !== request) return;
-        const data = validateImportedChart(JSON.parse(content));
-        showChart(data, data.title || 'Lá số từ file', false, true);
-      } catch (error) {
-        if (id !== request) return;
-        state.setState({ isLoading: false, error: `Không đọc được file: ${error.message}`, needsInfo: null });
-      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          if (typeof reader.result !== 'string') throw new Error('Không đọc được nội dung văn bản.');
+          const parsed = JSON.parse(reader.result);
+          const data = validateImportedChart(parsed);
+          showChart(data, data.title || 'Lá số từ file', false, true);
+        } catch (error) {
+          state.setState({ error: `Không đọc được file: ${error.message}`, needsInfo: null });
+        }
+        jsonFileInput.value = '';
+      };
+      reader.onerror = () => {
+        state.setState({ error: 'Không đọc được file.', needsInfo: null });
+        jsonFileInput.value = '';
+      };
+      reader.readAsText(file);
     });
   }
 

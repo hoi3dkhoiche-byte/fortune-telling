@@ -7,6 +7,7 @@ const contextBuilder = require('./context-builder');
 const mockAdapter = require('./adapters/mock');
 const openAiAdapter = require('./adapters/openai-compatible');
 const pipeline = require('./pipeline');
+const training = require('./training');
 
 module.exports = {
   ...schema,
@@ -16,4 +17,5 @@ module.exports = {
   ...mockAdapter,
   ...openAiAdapter,
   ...pipeline,
+  ...training,
 };

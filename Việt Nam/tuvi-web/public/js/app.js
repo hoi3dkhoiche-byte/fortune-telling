@@ -31,6 +31,7 @@ function setupViewNavigation() {
   const importedBadge = document.getElementById('imported-badge');
   let renderedResult;
   let renderedSummary;
+  let renderedFocusPalace = '';
 
   state.subscribe(s => {
     for (const [view, section] of Object.entries(views)) {
@@ -52,8 +53,18 @@ function setupViewNavigation() {
     }
     if (s.currentView === 'reading' && s.currentNatal !== renderedSummary) {
       renderedSummary = s.currentNatal;
+      renderedFocusPalace = s.focusPalace || '';
       renderFactSummary(readings, renderedSummary);
-      renderModelPanel(readings, renderedSummary);
+      renderModelPanel(readings, renderedSummary, { initialFocusPalace: renderedFocusPalace });
+    } else if (s.currentView === 'reading' && s.focusPalace !== renderedFocusPalace) {
+      renderedFocusPalace = s.focusPalace || '';
+      const focusSelect = document.getElementById('model-focus-palace');
+      if (focusSelect instanceof HTMLSelectElement) {
+        focusSelect.value = renderedFocusPalace;
+        if (renderedFocusPalace) {
+          focusSelect.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
     }
   });
 

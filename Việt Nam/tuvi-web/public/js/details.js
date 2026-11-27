@@ -108,16 +108,26 @@ export function setupDetails() {
       ` : ''}
 
       <div class="detail-cta-wrap">
-        <button class="btn btn-primary" id="side-goto-reading-btn" type="button">
-          Xem dữ kiện lá số ›
+        <button class="btn btn-primary" id="side-focus-reading-btn" type="button">
+          Phân tích cung ${escapeHtml(palace.labelVi || palace.name)} ›
+        </button>
+        <button class="btn btn-secondary btn-sm" id="side-goto-reading-btn" type="button">
+          Xem toàn bộ dữ kiện lá số
         </button>
       </div>
     `;
 
+    const focusReadingBtn = detailsBody.querySelector('#side-focus-reading-btn');
+    if (focusReadingBtn) {
+      focusReadingBtn.addEventListener('click', () => {
+        state.openReadingForPalace(palace.id || palace.labelVi || palace.name);
+      });
+    }
+
     const sideReadingBtn = detailsBody.querySelector('#side-goto-reading-btn');
     if (sideReadingBtn) {
       sideReadingBtn.addEventListener('click', () => {
-        state.setView('reading');
+        state.openReadingForPalace('');
       });
     }
 

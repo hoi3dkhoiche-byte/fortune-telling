@@ -12,7 +12,9 @@
   "scripts": {
     "typecheck": "node ../tuvi-core/node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
     "test": "node --test tests/*.test.js",
-    "eval": "node eval/run-eval.js"
+    "eval": "node eval/run-eval.js",
+    "build:dataset": "node scripts/build-training-data.js",
+    "verify:dataset": "node scripts/verify-dataset.js"
   },
   "license": "MIT"
 }

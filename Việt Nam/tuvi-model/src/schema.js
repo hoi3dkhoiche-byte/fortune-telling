@@ -164,6 +164,102 @@ function validateInterpretationSchema(value) {
   return errors;
 }
 
+/**
+ * Builds a dynamic per-chart JSON Schema (`response_format.json_schema`) compatible with
+ * OpenAI Structured Outputs, vLLM, Ollama, and llama.cpp constrained decoding.
+ * Locks `factIds` to the chart's actual `promptFacts` IDs and `quoteIds` to `retrievedQuotes` IDs
+ * so a local/fine-tuned model cannot emit hallucinated IDs during token generation.
+ *
+ * @param {any} context AnonymizedContext from `buildAnonymizedContext`
+ * @param {Array<{ id: string }>} [retrievedQuotes]
+ */
+function buildResponseJsonSchema(context, retrievedQuotes = undefined) {
+  const sourceFacts = Array.isArray(context?.promptFacts) && context.promptFacts.length > 0
+    ? context.promptFacts
+    : (Array.isArray(context?.facts) ? context.facts : []);
+  const factEnum = [...new Set(sourceFacts.map(f => f?.id).filter(Boolean))];
+  const quotes = Array.isArray(retrievedQuotes)
+    ? retrievedQuotes
+    : (Array.isArray(context?.retrievedQuotes) ? context.retrievedQuotes : []);
+  const quoteEnum = [...new Set(quotes.map(q => q?.id).filter(Boolean))];
+
+  const factItemSchema = factEnum.length > 0
+    ? { type: 'string', enum: factEnum }
+    : { type: 'string' };
+
+  const quoteArraySchema = quoteEnum.length > 0
+    ? { type: 'array', items: { type: 'string', enum: quoteEnum } }
+    : { type: 'array', maxItems: 0, items: { type: 'string' } };
+
+  return {
+    name: 'tuvi_interpretation_v0',
+    strict: true,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['schemaVersion', 'summary', 'reasoningSteps', 'claims', 'actionGuidance', 'disclaimer'],
+      properties: {
+        schemaVersion: { type: 'string', enum: [INTERPRETATION_SCHEMA_VERSION] },
+        summary: { type: 'string' },
+        reasoningSteps: {
+          type: 'array',
+          minItems: 1,
+          items: { type: 'string' },
+        },
+        claims: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['id', 'category', 'statement', 'assertions', 'factIds', 'quoteIds', 'confidence'],
+            properties: {
+              id: { type: 'string' },
+              category: { type: 'string', enum: [...CLAIM_CATEGORIES] },
+              statement: { type: 'string' },
+              assertions: {
+                type: 'array',
+                minItems: 1,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['subjectId', 'predicate'],
+                  properties: {
+                    subjectId: { type: 'string' },
+                    predicate: { type: 'string', enum: [...ASSERTION_PREDICATES] },
+                    objectId: { type: 'string' },
+                    value: {
+                      anyOf: [
+                        { type: 'string' },
+                        { type: 'number' },
+                        { type: 'boolean' },
+                        { type: 'array', items: { type: 'number' } },
+                      ],
+                    },
+                  },
+                },
+              },
+              factIds: {
+                type: 'array',
+                minItems: 1,
+                items: factItemSchema,
+              },
+              quoteIds: quoteArraySchema,
+              confidence: { type: 'string', enum: [...CLAIM_CONFIDENCES] },
+            },
+          },
+        },
+        actionGuidance: {
+          type: 'array',
+          minItems: 1,
+          items: { type: 'string' },
+        },
+        disclaimer: { type: 'string' },
+      },
+    },
+  };
+}
+
 module.exports = {
   INTERPRETATION_SCHEMA_VERSION,
   CLAIM_CATEGORIES,
@@ -171,4 +267,5 @@ module.exports = {
   ASSERTION_PREDICATES,
   ModelLayerError,
   validateInterpretationSchema,
+  buildResponseJsonSchema,
 };

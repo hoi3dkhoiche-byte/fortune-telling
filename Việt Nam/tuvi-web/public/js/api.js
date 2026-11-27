@@ -28,6 +28,16 @@ export async function fetchSampleChart() {
   }
 }
 
+export async function fetchModelStatus() {
+  try {
+    const res = await fetch('/api/model/status');
+    if (!res.ok) return { localReachable: false, defaultMode: 'mock', availableModels: [] };
+    return await res.json();
+  } catch {
+    return { localReachable: false, defaultMode: 'mock', availableModels: [] };
+  }
+}
+
 export async function computeNatalApi(birthInput, profileId, selectedScenario, selectedInstant) {
   // Hủy request cũ đang chạy để tránh đè kết quả
   if (activeAbortController) {

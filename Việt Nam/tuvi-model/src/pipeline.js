@@ -66,9 +66,21 @@ async function interpretNatal(natalResult, options = {}) {
   //    User-entered `question` was already checked with free-text regexes in step 1; here we check
   //    exact chart birth values (dates, clock time, tz, coordinates, extraSensitive) on outbound payloads,
   //    and exclude static lecture quote bodies from clock-time matching so quotes like "11 giờ đêm" never false-positive.
-  const { systemPrompt, userPrompt, promptChars, promptTokensEstimate } = buildPrompts(context, {
+  const {
+    systemPrompt,
+    userPrompt,
+    promptChars,
+    promptTokensEstimate,
+    includedFacts,
+    includedQuotes,
+  } = buildPrompts(context, {
     maxPromptTokens: options.maxPromptTokens,
   });
+  const budgetedContext = {
+    ...context,
+    promptFacts: includedFacts,
+    retrievedQuotes: includedQuotes,
+  };
   const checkContext = assertNoBirthPii(JSON.stringify(baseContext), trustedNatal, extraSensitive, {
     scanFreeTextPatterns: false,
   });
@@ -99,7 +111,7 @@ async function interpretNatal(natalResult, options = {}) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     attempts++;
     const generated = await adapter.generate({
-      context,
+      context: budgetedContext,
       systemPrompt,
       userPrompt,
       retryFeedback: attempt > 0 ? lastValidation?.errors : undefined,
@@ -134,7 +146,7 @@ async function interpretNatal(natalResult, options = {}) {
     }
 
     lastResponse = generated.response;
-    lastValidation = validateInterpretation(lastResponse, trustedNatal, retrievedQuotes);
+    lastValidation = validateInterpretation(lastResponse, trustedNatal, includedQuotes);
     if (lastValidation.valid) break;
   }
 
@@ -149,7 +161,7 @@ async function interpretNatal(natalResult, options = {}) {
     // Never return unvalidated or hallucinated claims to downstream UI callers
     interpretation: isValid ? lastResponse : null,
     validation: lastValidation,
-    retrievedQuotes,
+    retrievedQuotes: includedQuotes,
     privacy: {
       directBirthIdentifiersStripped,
       checkedPayloads: 3,

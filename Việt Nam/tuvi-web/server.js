@@ -8,6 +8,13 @@ const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.resolve(__dirname, 'public');
 const MAX_BODY_BYTES = 1024 * 1024;
 
+/** @type {ReturnType<typeof modelLayer.loadCorpus> | null} */
+let cachedCorpus = null;
+function getCorpus() {
+  if (!cachedCorpus) cachedCorpus = modelLayer.loadCorpus();
+  return cachedCorpus;
+}
+
 class RequestError extends Error {
   constructor(statusCode, message, details) {
     super(message);
@@ -270,11 +277,28 @@ const server = http.createServer(async (req, res) => {
 
     // 5. Corpus stats (1,848 Thiên Kỷ quotes)
     if (req.method === 'GET' && pathname === '/api/corpus/stats') {
-      const corpus = modelLayer.loadCorpus();
+      const corpus = getCorpus();
       sendJson(res, 200, {
         status: 'ok',
         lectureCount: corpus.lectureCount,
         quoteCount: corpus.quotes.length,
+      });
+      return;
+    }
+
+    // 5b. Model runtime status (probes local loopback Ollama/vLLM safely)
+    if (req.method === 'GET' && pathname === '/api/model/status') {
+      const corpus = getCorpus();
+      const probe = await modelLayer.probeModelEndpoint({ timeoutMs: 1200 });
+      sendJson(res, 200, {
+        status: 'ok',
+        defaultMode: process.env.TUVI_MODEL_MODE || (probe.reachable ? 'local' : 'mock'),
+        configuredModel: probe.configuredModel,
+        baseUrl: probe.baseUrl,
+        localReachable: probe.reachable,
+        modelLoaded: Boolean(probe.modelLoaded),
+        availableModels: probe.availableModels || [],
+        corpusQuotes: corpus.quotes.length,
       });
       return;
     }
@@ -350,6 +374,7 @@ const server = http.createServer(async (req, res) => {
       try {
         const output = await modelLayer.interpretNatal(resolvedNatal, {
           adapter,
+          corpus: getCorpus(),
           question,
           focusPalace,
         });
@@ -393,6 +418,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
+  getCorpus();
   server.listen(PORT, () => {
     console.log(`[Thiên Kỷ Web] Máy chủ đang chạy tại: http://localhost:${PORT}`);
   });

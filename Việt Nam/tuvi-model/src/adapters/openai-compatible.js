@@ -1,6 +1,6 @@
 'use strict';
 
-const { ModelLayerError } = require('../schema');
+const { ModelLayerError, buildResponseJsonSchema } = require('../schema');
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
@@ -54,10 +54,89 @@ function extractJsonResponse(rawText) {
 }
 
 /**
+ * Probes an OpenAI-compatible local endpoint (`/models`) with a short timeout to report
+ * online status and loaded model IDs for the web UI without leaking data off loopback.
+ *
+ * @param {{
+ *   baseUrl?: string,
+ *   model?: string,
+ *   apiKey?: string,
+ *   allowRemote?: boolean,
+ *   timeoutMs?: number,
+ *   fetchImpl?: typeof fetch,
+ * }} [options]
+ */
+async function probeModelEndpoint(options = {}) {
+  const baseUrl = (options.baseUrl || process.env.TUVI_LLM_BASE_URL || 'http://127.0.0.1:11434/v1').replace(/\/+$/, '');
+  const configuredModel = options.model || process.env.TUVI_LLM_MODEL || 'qwen2.5:14b-instruct';
+  const apiKey = options.apiKey ?? process.env.TUVI_LLM_API_KEY ?? '';
+  const allowRemote = options.allowRemote ?? (process.env.TUVI_LLM_ALLOW_REMOTE === '1');
+  const timeoutMs = options.timeoutMs ?? 1500;
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+
+  const loopback = isLoopbackUrl(baseUrl);
+  if (!loopback && !allowRemote) {
+    return {
+      reachable: false,
+      loopback: false,
+      blockedRemote: true,
+      baseUrl,
+      configuredModel,
+      availableModels: [],
+    };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(`${baseUrl}/models`, {
+      method: 'GET',
+      redirect: 'error',
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      return {
+        reachable: false,
+        loopback,
+        baseUrl,
+        configuredModel,
+        httpStatus: res.status,
+        availableModels: [],
+      };
+    }
+    const body = await res.json().catch(() => ({}));
+    const availableModels = Array.isArray(body?.data)
+      ? body.data.map(item => item?.id).filter(id => typeof id === 'string')
+      : [];
+    return {
+      reachable: true,
+      loopback,
+      baseUrl,
+      configuredModel,
+      modelLoaded: availableModels.length === 0 || availableModels.includes(configuredModel),
+      availableModels,
+    };
+  } catch {
+    return {
+      reachable: false,
+      loopback,
+      baseUrl,
+      configuredModel,
+      availableModels: [],
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Creates a real OpenAI-compatible chat completions adapter.
  * Defaults to local Ollama (`http://127.0.0.1:11434/v1`) and REFUSES non-loopback
  * endpoints unless `allowRemote: true` is explicitly configured.
- * Catches JSON syntax errors cleanly (`parseError`) so the pipeline retry loop can self-correct!
+ * Supports optional constrained decoding (`structuredOutputs: true`) via dynamic per-chart
+ * `json_schema` with automatic fallback to `json_object`, and catches JSON syntax errors
+ * cleanly (`parseError`) so the pipeline retry loop can self-correct!
  *
  * @param {{
  *   baseUrl?: string,
@@ -67,6 +146,7 @@ function extractJsonResponse(rawText) {
  *   timeoutMs?: number,
  *   temperature?: number,
  *   numCtx?: number,
+ *   structuredOutputs?: boolean,
  *   fetchImpl?: typeof fetch,
  * }} [options]
  */
@@ -78,6 +158,7 @@ function createOpenAICompatibleAdapter(options = {}) {
   const timeoutMs = options.timeoutMs ?? 60_000;
   const temperature = options.temperature ?? 0.2;
   const numCtx = options.numCtx ?? (Number(process.env.TUVI_LLM_NUM_CTX) || 8192);
+  const structuredOutputs = options.structuredOutputs ?? (process.env.TUVI_LLM_STRUCTURED === '1');
   const fetchImpl = options.fetchImpl || globalThis.fetch;
 
   const loopback = isLoopbackUrl(baseUrl);
@@ -101,7 +182,7 @@ function createOpenAICompatibleAdapter(options = {}) {
      *   previousRawOutput?: string,
      * }} input
      */
-    async generate({ systemPrompt, userPrompt, retryFeedback, previousRawOutput }) {
+    async generate({ context, systemPrompt, userPrompt, retryFeedback, previousRawOutput }) {
       /** @type {Array<{ role: string, content: string }>} */
       const messages = [
         { role: 'system', content: systemPrompt },
@@ -133,20 +214,29 @@ function createOpenAICompatibleAdapter(options = {}) {
           'Content-Type': 'application/json',
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         };
+        const sendChatRequest = async responseFormat => fetchImpl(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          redirect: 'error',
+          headers,
+          body: JSON.stringify({
+            model,
+            temperature,
+            response_format: responseFormat,
+            ...(loopback && numCtx > 0 ? { options: { num_ctx: numCtx } } : {}),
+            messages,
+          }),
+          signal: controller.signal,
+        });
+
         try {
-          res = await fetchImpl(`${baseUrl}/chat/completions`, {
-            method: 'POST',
-            redirect: 'error',
-            headers,
-            body: JSON.stringify({
-              model,
-              temperature,
-              response_format: { type: 'json_object' },
-              ...(loopback && numCtx > 0 ? { options: { num_ctx: numCtx } } : {}),
-              messages,
-            }),
-            signal: controller.signal,
-          });
+          const primaryFormat = structuredOutputs && context
+            ? { type: 'json_schema', json_schema: buildResponseJsonSchema(context, context.retrievedQuotes) }
+            : { type: 'json_object' };
+          res = await sendChatRequest(primaryFormat);
+          // Graceful fallback if the local server only supports json_object and rejects json_schema with HTTP 400
+          if (!res.ok && res.status === 400 && primaryFormat.type === 'json_schema') {
+            res = await sendChatRequest({ type: 'json_object' });
+          }
         } catch (netErr) {
           const msg = netErr instanceof Error ? netErr.message : String(netErr);
           throw new ModelLayerError(
@@ -208,5 +298,6 @@ function createOpenAICompatibleAdapter(options = {}) {
 module.exports = {
   isLoopbackUrl,
   extractJsonResponse,
+  probeModelEndpoint,
   createOpenAICompatibleAdapter,
 };

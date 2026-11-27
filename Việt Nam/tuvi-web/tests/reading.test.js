@@ -44,3 +44,21 @@ test('file JSON mẫu hiển thị dữ kiện dù chưa có displayNatal', asyn
   assert.ok(rows.some(row => /^Thiên Lương tọa thủ Mệnh/.test(row.text)));
   assert.ok(rows.some(row => /Hóa Kỵ tại/.test(row.text)));
 });
+
+test('GET /api/model/status trả trạng thái runtime cục bộ và số lượng trích dẫn kho Thiên Kỷ', async () => {
+  const { server } = require('../server.js');
+  await new Promise(resolve => { server.listen(0, '127.0.0.1', () => resolve(null)); });
+  try {
+    const addr = /** @type {import('node:net').AddressInfo} */ (server.address());
+    const res = await fetch(`http://127.0.0.1:${addr.port}/api/model/status`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, 'ok');
+    assert.equal(body.corpusQuotes, 1848);
+    assert.equal(typeof body.localReachable, 'boolean');
+    assert.equal(typeof body.configuredModel, 'string');
+    assert.ok(Array.isArray(body.availableModels));
+  } finally {
+    await new Promise(resolve => { server.close(() => resolve(null)); });
+  }
+});

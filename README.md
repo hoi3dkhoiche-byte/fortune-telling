@@ -87,6 +87,20 @@ fortune-telling/
 │   │   ├── tests/                                      <-- Bộ test tự động 49/49 tests (natal, facts, normalize, vietnamese-adapter...)
 │   │   └── vendor/                                     <-- Mã nguồn thuật toán gốc và bảng an sao
 │   │
+│   ├── tuvi-model/                                     <-- MODEL & TRAINING LAYER: Kiểm định sự thật, RAG & Sinh dữ liệu SFT/DPO (@tuvi/model)
+│   │   ├── src/
+│   │   │   ├── schema.js & validator.js                <-- Schema tuvi.interpretation.v0, Dynamic JSON Schema & Fact-Checking Validator
+│   │   │   ├── context-builder.js                      <-- Khử PII, ngân sách token cấu hình được & lọc promptFacts theo cung trọng tâm
+│   │   │   ├── rag.js                                  <-- Chỉ mục BM25 + tổ hợp cách cục trên 1.848 câu giảng Thiên Kỷ
+│   │   │   ├── pipeline.js                             <-- Đường ống tự sửa lỗi (JSON + Fact) & chặn phát tán ảo giác
+│   │   │   ├── training.js                             <-- Bộ lấy mẫu lá số phân tầng, sinh CoT <think>, SFT & cặp DPO
+│   │   │   └── adapters/                               <-- Adapter OpenAI-compatible (Ollama/vLLM loopback) & Mock đối chứng
+│   │   ├── scripts/
+│   │   │   ├── build-training-data.js                  <-- Xuất sft_messages.jsonl, dpo_pairs.jsonl, distill_prompts.jsonl
+│   │   │   └── verify-dataset.js                       <-- Lọc tự động dữ liệu Teacher LLM qua Validator & PII Firewall
+│   │   ├── eval/run-eval.js                            <-- Bộ đánh giá đối kháng, True-Negative, Pass@1 và độ trễ
+│   │   └── TRAINING.md & Modelfile.example             <-- Hướng dẫn train QLoRA SFT/DPO và đóng gói Ollama
+│   │
 │   ├── tuvi-web/                                       <-- FRONTEND & ADAPTER: Giao diện web Tử Vi Vũ Trụ
 │   │   ├── server.js                                   <-- Máy chủ Node.js REST API & static server bảo mật
 │   │   ├── package.json                                <-- Quản lý phụ thuộc và scripts chạy web/test

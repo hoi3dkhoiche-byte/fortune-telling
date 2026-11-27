@@ -178,15 +178,80 @@ function buildCorpusIndex(docsDir) {
         phrases.push({ phrase: sh.transformation, weight: 1.8 });
         phrases.push({ phrase: `${sh.starNameVi} ${sh.transformation}`, weight: 3.2 });
       }
-      // Detect iconic Thiên Kỷ star clusters in Mệnh or Tam phương
-      const mingSet = new Set([...(s.mingMajorStars || []), ...(s.mingBorrowedStars || [])]);
-      if (mingSet.has('Thất Sát') || mingSet.has('Phá Quân') || mingSet.has('Tham Lang')) {
-        phrases.push({ phrase: 'sát phá tham', weight: 2.8 });
+      // Detect iconic Thiên Kỷ star clusters across Mệnh + Tam Phương Tứ Chính of the active center palace
+      const activeCenterId = query.focusPalace || ctx.focusPalaceId || s.mingPalaceId || 'PALACE.MING';
+      const centerRel = Array.isArray(ctx.relations)
+        ? ctx.relations.find(r => r.palaceId === activeCenterId)
+        : null;
+      const trinePalaceIds = new Set([activeCenterId, s.mingPalaceId || 'PALACE.MING']);
+      if (centerRel && Array.isArray(centerRel.sanFangSiZheng)) {
+        for (const rel of centerRel.sanFangSiZheng) {
+          if (rel?.id) trinePalaceIds.add(rel.id);
+        }
       }
-      if (mingSet.has('Thiên Cơ') || mingSet.has('Thiên Lương') || mingSet.has('Thái Âm') || mingSet.has('Thiên Đồng')) {
-        phrases.push({ phrase: 'cơ nguyệt đồng lương', weight: 2.4 });
+      const trineMajorSet = new Set([...(s.mingMajorStars || []), ...(s.mingBorrowedStars || [])]);
+      const trineAuxSet = new Set();
+      if (Array.isArray(ctx.palaces)) {
+        for (const p of ctx.palaces) {
+          if (!trinePalaceIds.has(p.id)) continue;
+          for (const st of p.majorStars || []) {
+            if (st?.nameVi) trineMajorSet.add(st.nameVi);
+            if (p.id === activeCenterId && st?.nameVi) {
+              phrases.push({ phrase: st.nameVi, weight: 3.6 });
+            }
+          }
+          for (const aux of p.otherStars || []) {
+            if (aux?.nameVi) trineAuxSet.add(aux.nameVi);
+          }
+        }
       }
-      // Check Lộc phùng Kỵ / Khoa phùng Kỵ in the same palace
+
+      if (trineMajorSet.has('Thất Sát') && trineMajorSet.has('Phá Quân') && trineMajorSet.has('Tham Lang')) {
+        phrases.push({ phrase: 'sát phá tham', weight: 3.4 });
+      } else if (trineMajorSet.has('Thất Sát') || trineMajorSet.has('Phá Quân') || trineMajorSet.has('Tham Lang')) {
+        phrases.push({ phrase: 'sát phá tham', weight: 2.5 });
+      }
+      if (trineMajorSet.has('Tử Vi') && trineMajorSet.has('Thiên Phủ')) {
+        phrases.push({ phrase: 'tử phủ vũ tướng', weight: 3.2 });
+        phrases.push({ phrase: 'tử phủ đồng cung', weight: 2.8 });
+      }
+      if (trineMajorSet.has('Thiên Cơ') && trineMajorSet.has('Thiên Lương')) {
+        phrases.push({ phrase: 'cơ lương', weight: 3.2 });
+        phrases.push({ phrase: 'cơ nguyệt đồng lương', weight: 2.8 });
+      } else if (trineMajorSet.has('Thiên Cơ') && trineMajorSet.has('Thái Âm') && trineMajorSet.has('Thiên Đồng') && trineMajorSet.has('Thiên Lương')) {
+        phrases.push({ phrase: 'cơ nguyệt đồng lương', weight: 3.4 });
+      }
+      if (trineMajorSet.has('Cự Môn') && trineMajorSet.has('Thái Dương')) {
+        phrases.push({ phrase: 'cự nhật', weight: 3.2 });
+      }
+      if (trineMajorSet.has('Thái Dương') && trineMajorSet.has('Thái Âm')) {
+        phrases.push({ phrase: 'nhật nguyệt tịnh minh', weight: 2.8 });
+        phrases.push({ phrase: 'nhật nguyệt phản bối', weight: 2.4 });
+      }
+      if (trineMajorSet.has('Liêm Trinh') && trineMajorSet.has('Tham Lang')) {
+        phrases.push({ phrase: 'liêm tham', weight: 3.0 });
+      }
+      if (trineMajorSet.has('Vũ Khúc') && trineMajorSet.has('Tham Lang')) {
+        phrases.push({ phrase: 'vũ tham', weight: 3.0 });
+      }
+      // Classic auxiliary &煞 pairings emphasized by Ni Haixia
+      if (trineAuxSet.has('Thiên Mã') && (trineAuxSet.has('Lộc Tồn') || (s.siHua || []).some(x => x.transformation === 'Hóa Lộc'))) {
+        phrases.push({ phrase: 'lộc mã giao trì', weight: 3.2 });
+      }
+      if (trineAuxSet.has('Tả Phụ') && trineAuxSet.has('Hữu Bật')) {
+        phrases.push({ phrase: 'tả phụ hữu bật', weight: 2.2 });
+      }
+      if (trineAuxSet.has('Văn Xương') && trineAuxSet.has('Văn Khúc')) {
+        phrases.push({ phrase: 'văn xương văn khúc', weight: 2.2 });
+      }
+      if (trineAuxSet.has('Địa Không') || trineAuxSet.has('Địa Kiếp')) {
+        phrases.push({ phrase: 'địa không địa kiếp', weight: 2.2 });
+      }
+      if (trineAuxSet.has('Hỏa Tinh') || trineAuxSet.has('Linh Tinh')) {
+        phrases.push({ phrase: 'hỏa tinh linh tinh', weight: 2.2 });
+      }
+
+      // Check Lộc phùng Kỵ / Khoa phùng Kỵ in the same palace or opposite palace
       const siHuaByPalace = new Map();
       for (const sh of s.siHua || []) {
         if (!siHuaByPalace.has(sh.palaceNameVi)) siHuaByPalace.set(sh.palaceNameVi, new Set());

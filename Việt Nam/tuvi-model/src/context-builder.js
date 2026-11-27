@@ -567,7 +567,15 @@ function buildPrompts(context, options = {}) {
   const promptChars = systemPrompt.length + userPrompt.length;
   const promptTokensEstimate = estimatePromptTokens(`${systemPrompt}\n${userPrompt}`);
 
-  return { systemPrompt, userPrompt, promptChars, promptTokensEstimate, maxPromptTokens };
+  return {
+    systemPrompt,
+    userPrompt,
+    promptChars,
+    promptTokensEstimate,
+    maxPromptTokens,
+    includedFacts: workingFacts,
+    includedQuotes: workingQuotes,
+  };
 }
 
 module.exports = {

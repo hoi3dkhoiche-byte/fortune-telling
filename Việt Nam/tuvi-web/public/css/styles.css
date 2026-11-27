@@ -1563,6 +1563,9 @@ body {
 
 .detail-cta-wrap {
   margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .detail-cta-wrap .btn {
@@ -1947,6 +1950,30 @@ body {
   line-height: 1.5;
 }
 
+.model-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.model-runtime-badge {
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: var(--bg-grouped);
+  border: 1px solid var(--hairline);
+  color: var(--ink-secondary);
+}
+
+.model-runtime-badge.is-online {
+  background: var(--accent-green-tint);
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
 .model-controls {
   display: flex;
   flex-wrap: wrap;
@@ -1954,12 +1981,23 @@ body {
   align-items: center;
 }
 
+.model-focus-select {
+  flex: 1 1 220px;
+}
+
 .model-controls .form-input {
   flex: 1 1 240px;
 }
 
 .model-mode-select {
-  flex: 0 1 260px;
+  flex: 1 1 250px;
+}
+
+.fact-row-highlight {
+  background: var(--accent-blue-tint);
+  border-radius: 6px;
+  padding: 2px 6px;
+  transition: background-color 0.25s ease;
 }
 
 .model-output {
@@ -2025,6 +2063,14 @@ body {
 .fact-id-pill {
   background: var(--accent-blue-tint);
   color: var(--accent-blue);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .fact-id-pill:hover {
+    border-color: var(--accent-blue);
+  }
 }
 
 .quote-id-pill {

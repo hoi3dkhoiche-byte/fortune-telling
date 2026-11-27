@@ -207,6 +207,14 @@ export const CLAIM_CATEGORIES: readonly ClaimCategory[];
 export const ASSERTION_PREDICATES: readonly AssertionPredicate[];
 export function canonicalizeVi(raw: string): string;
 export function validateInterpretationSchema(value: unknown): ValidationIssue[];
+export function buildResponseJsonSchema(
+  context: AnonymizedContext,
+  retrievedQuotes?: Array<{ id: string }>,
+): {
+  name: string;
+  strict: boolean;
+  schema: Record<string, unknown>;
+};
 export function validateInterpretation(
   response: unknown,
   natalResult: any,
@@ -249,8 +257,27 @@ export function buildPrompts(
   promptChars: number;
   promptTokensEstimate: number;
   maxPromptTokens: number;
+  includedFacts: Array<{ id: string; subjectId: string; predicate: string; objectId?: string; value?: unknown }>;
+  includedQuotes: RetrievedQuote[];
 };
 export function createMockAdapter(): ModelAdapter;
+export function probeModelEndpoint(options?: {
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+  allowRemote?: boolean;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+}): Promise<{
+  reachable: boolean;
+  loopback: boolean;
+  blockedRemote?: boolean;
+  baseUrl: string;
+  configuredModel: string;
+  modelLoaded?: boolean;
+  httpStatus?: number;
+  availableModels: string[];
+}>;
 export function createOpenAICompatibleAdapter(options?: {
   baseUrl?: string;
   model?: string;
@@ -259,6 +286,7 @@ export function createOpenAICompatibleAdapter(options?: {
   timeoutMs?: number;
   temperature?: number;
   numCtx?: number;
+  structuredOutputs?: boolean;
   fetchImpl?: typeof fetch;
 }): ModelAdapter;
 export function interpretNatal(
@@ -289,3 +317,49 @@ export function interpretNatal(
     strippedFields: string[];
   };
 }>;
+export function buildChainOfThought(context: AnonymizedContext): string[];
+export function synthesizeGroundedInterpretation(context: AnonymizedContext): InterpretationResponse;
+export function formatAssistantWithCoT(interpretation: InterpretationResponse): string;
+export function buildTrainingBundle(
+  natalResult: any,
+  options?: {
+    corpus?: ReturnType<typeof loadCorpus>;
+    question?: string;
+    focusPalace?: string;
+    variantIndex?: number;
+    maxPromptTokens?: number;
+  },
+): {
+  sft: { messages: Array<{ role: string; content: string }>; metadata: Record<string, unknown> };
+  dpo: {
+    prompt: Array<{ role: string; content: string }>;
+    chosen: Array<{ role: string; content: string }>;
+    rejected: Array<{ role: string; content: string }>;
+    rejectionCode: string;
+    observedErrors: string[];
+    metadata: Record<string, unknown>;
+  };
+  distillPrompt: {
+    systemPrompt: string;
+    userPrompt: string;
+    responseJsonSchema: ReturnType<typeof buildResponseJsonSchema>;
+    metadata: Record<string, unknown>;
+  };
+};
+export function sampleStratifiedCharts(options?: {
+  count?: number;
+  profileId?: string;
+}): {
+  items: Array<{ birth: unknown; natalResult: any; topic: { focusPalace?: string; question?: string } }>;
+  coverage: {
+    totalCharts: number;
+    majorStarsCovered: number;
+    stemsCovered: number;
+    wuxingJuCovered: number;
+    emptyMingCharts: number;
+  };
+};
+export function verifyDatasetRecord(record: unknown): ValidationReport | {
+  valid: false;
+  errors: Array<{ code: string; path: string; message: string }>;
+};
